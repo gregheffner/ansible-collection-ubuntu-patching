@@ -5,10 +5,10 @@
     filter: ansible_date_time
   delegate_to: localhost
 
-- name: Gather facts for localhost to get environment
-  setup:
+- name: Debug OP_SERVICE_ACCOUNT_TOKEN availability
+  debug:
+    msg: "OP_SERVICE_ACCOUNT_TOKEN is {{ 'set' if lookup('env', 'OP_SERVICE_ACCOUNT_TOKEN') else 'NOT set' }}"
   delegate_to: localhost
-  run_once: true
 
 - name: Get Datadog API key from 1Password
   shell: op read "op://Secure APIs/vault_dd_api_key/password"
@@ -16,7 +16,7 @@
   no_log: true
   delegate_to: localhost
   environment:
-    OP_SERVICE_ACCOUNT_TOKEN: "{{ hostvars['localhost']['ansible_env']['OP_SERVICE_ACCOUNT_TOKEN'] | default(lookup('env', 'OP_SERVICE_ACCOUNT_TOKEN')) }}"
+    OP_SERVICE_ACCOUNT_TOKEN: "{{ lookup('env', 'OP_SERVICE_ACCOUNT_TOKEN') }}"
 
 - name: Get Datadog Application key from 1Password
   shell: op read "op://Secure APIs/vault_dd_app_key/password"
@@ -24,7 +24,7 @@
   no_log: true
   delegate_to: localhost
   environment:
-    OP_SERVICE_ACCOUNT_TOKEN: "{{ hostvars['localhost']['ansible_env']['OP_SERVICE_ACCOUNT_TOKEN'] | default(lookup('env', 'OP_SERVICE_ACCOUNT_TOKEN')) }}"
+    OP_SERVICE_ACCOUNT_TOKEN: "{{ lookup('env', 'OP_SERVICE_ACCOUNT_TOKEN') }}"
 
 - name: Set API key variables
   set_fact:
