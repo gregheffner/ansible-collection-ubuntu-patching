@@ -2,9 +2,10 @@
 # Sample inventory file for Ubuntu patching collection
 
 [k8s_cluster]
-k8-node-01 ansible_host=192.168.1.101
-k8-node-02 ansible_host=192.168.1.102
-k8-node-03 ansible_host=192.168.1.103
+m1 ansible_host=192.168.1.101
+w1 ansible_host=192.168.1.102
+w2 ansible_host=192.168.1.103
+w3 ansible_host=192.168.1.104
 
 [docker]
 dockerhost ansible_host=localhost

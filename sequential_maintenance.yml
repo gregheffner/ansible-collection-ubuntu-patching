@@ -14,7 +14,7 @@
     update_docker: true
     pause_monitors_enabled: true
     pause_duration: 3600  # 1 hour
-    k8_primary_node: "{{ groups['k8s_cluster'][0] if 'k8s_cluster' in groups else inventory_hostname }}"
+    k8_primary_node: "k8-primary"
     reboot_delay: 30
     k8s_reboot_timeout: 600
     node_ready_retries: 30
@@ -43,7 +43,7 @@
           Time: {{ ansible_date_time.iso8601 }}
 
 - name: Docker Host Maintenance (Phase 2) 
-  hosts: docker
+  hosts: dockerhost
   become: true
   gather_facts: true
   

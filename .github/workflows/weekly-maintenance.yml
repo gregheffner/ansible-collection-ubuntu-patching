@@ -87,7 +87,7 @@ jobs:
           
           # Test K8s cluster connectivity with verbose output for debugging
           echo "Testing K8s cluster hosts with ansible:"
-          if ansible k8s_cluster -i inventory/hosts.ini -m ping --one-line -vv 2>&1 | tee /tmp/k8s_debug.log; then
+          if ansible k8s_cluster -m ping --one-line -vv 2>&1 | tee /tmp/k8s_debug.log; then
             echo "✅ K8s cluster hosts reachable"
           else
             echo "❌ K8s cluster connectivity failed"
@@ -100,7 +100,7 @@ jobs:
           echo "Testing Docker hosts:"
           if ANSIBLE_HOST_KEY_CHECKING=False \
              ANSIBLE_SSH_ARGS="-o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no" \
-             ansible docker -i inventory/hosts.ini -m ping --one-line > /dev/null 2>&1; then
+             ansible dockerhost -m ping --one-line > /dev/null 2>&1; then
             echo "✅ Docker hosts reachable"
           else
             echo "❌ Docker host connectivity failed"
@@ -145,7 +145,6 @@ jobs:
           if ANSIBLE_HOST_KEY_CHECKING=False \
              ANSIBLE_SSH_ARGS="-o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no" \
              ansible-playbook sequential_maintenance.yml \
-             -i inventory/hosts.ini \
              --extra-vars "$TLS_VERIFY" \
              $CHECK_MODE \
              --one-line > /tmp/maintenance_summary.log 2>&1; then
