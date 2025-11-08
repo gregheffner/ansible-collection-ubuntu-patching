@@ -5,21 +5,18 @@
     filter: ansible_date_time
   delegate_to: localhost
 
-- name: Debug OP_SERVICE_ACCOUNT_TOKEN availability
-  debug:
-    msg: "OP_SERVICE_ACCOUNT_TOKEN is {{ 'set' if lookup('env', 'OP_SERVICE_ACCOUNT_TOKEN') else 'NOT set' }}"
-  delegate_to: localhost
-
 - name: Get Datadog API key from 1Password
-  shell: op read "op://Secure APIs/vault_dd_api_key/password"
+  shell: /home/linuxbrew/.linuxbrew/bin/op read "op://Secure APIs/vault_dd_api_key/password"
   register: dd_api_key_result
+  no_log: true
   delegate_to: localhost
   environment:
     OP_SERVICE_ACCOUNT_TOKEN: "{{ lookup('env', 'OP_SERVICE_ACCOUNT_TOKEN') }}"
 
 - name: Get Datadog Application key from 1Password
-  shell: op read "op://Secure APIs/vault_dd_app_key/password"
+  shell: /home/linuxbrew/.linuxbrew/bin/op read "op://Secure APIs/vault_dd_app_key/password"
   register: dd_app_key_result
+  no_log: true
   delegate_to: localhost
   environment:
     OP_SERVICE_ACCOUNT_TOKEN: "{{ lookup('env', 'OP_SERVICE_ACCOUNT_TOKEN') }}"
