@@ -10,6 +10,9 @@ pause_duration: 3600  # 1 hour in seconds
 
 # Kubernetes settings
 k8_primary_node: "k8-primary"
+kubeconfig_path: "/home/huey/.kube/config"  # Path to kubeconfig file
+k8s_skip_tls_verify: false  # Set to true for self-signed certificates
+k8s_api_server: ""  # Optional: Override API server URL
 reboot_delay: 30
 reboot_timeout: 600
 node_ready_retries: 30
