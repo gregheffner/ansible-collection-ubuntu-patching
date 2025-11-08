@@ -1,0 +1,25 @@
+---
+# Default variables for system_update role
+
+# Docker settings
+update_docker: true
+restart_docker_containers: true
+
+# Package update settings
+update_packages: true
+update_apt_packages: true
+perform_dist_upgrade: false
+cleanup_packages: true
+
+# Reboot settings
+perform_reboot: true
+force_reboot: true
+reboot_method: "legacy"
+reboot_timeout: 600
+connect_timeout: 20
+
+# Post-reboot script settings
+post_reboot_script_path: ""
+
+# Update behavior
+allow_reboot_when_required: true

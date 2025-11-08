@@ -1,0 +1,12 @@
+# Requirements for gregheffner.ubuntu_patching collection
+
+# If you want to install this collection and its dependencies:
+collections:
+  - name: gregheffner.ubuntu_patching
+    version: ">=1.0.0"
+    source: https://galaxy.ansible.com
+
+# Dependencies for development/testing:
+# - ansible-core>=2.12
+# - molecule (for testing)
+# - yamllint (for linting)

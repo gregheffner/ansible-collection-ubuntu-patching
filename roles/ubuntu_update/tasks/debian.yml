@@ -1,0 +1,39 @@
+---
+# Ubuntu package management tasks
+
+- name: Update APT cache (apt update)
+  become: true
+  apt:
+    update_cache: true
+    cache_valid_time: 3600
+  register: apt_cache_update_result
+  when: update_apt_packages | default(true)
+
+- name: Upgrade APT packages (apt upgrade)
+  become: true
+  apt:
+    upgrade: 'yes'
+  register: apt_upgrade_result
+  when: update_apt_packages | default(true)
+
+- name: Perform distribution upgrade (apt dist-upgrade)
+  become: true
+  apt:
+    upgrade: dist
+  register: apt_dist_upgrade_result
+  when: perform_dist_upgrade | default(false)
+
+- name: Clean up APT packages
+  become: true
+  apt:
+    autoremove: true
+    purge: true
+  when: cleanup_packages | default(true)
+
+- name: Display APT update results
+  debug:
+    msg: |
+      APT update completed:
+      - Packages updated: {{ apt_update_result.changed | default(false) }}
+      - Distribution upgrade: {{ apt_dist_upgrade_result.changed | default(false) }}
+  when: apt_update_result is defined or apt_dist_upgrade_result is defined

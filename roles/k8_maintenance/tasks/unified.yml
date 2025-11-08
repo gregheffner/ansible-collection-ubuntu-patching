@@ -1,0 +1,21 @@
+---
+# Unified maintenance workflow with step control
+- name: Execute Step 1 - Pause Monitors
+  include_tasks: pause_monitors.yml
+  when: 
+    - k8_maintenance_step in ['pause', 'all']
+    - inventory_hostname == ansible_play_hosts_all[0]
+
+- name: Execute Step 2 - System Updates
+  include_tasks: update_nodes.yml
+  when: k8_maintenance_step in ['maintenance', 'all']
+
+- name: Execute Step 2 - Kubernetes Reboot
+  include_tasks: k8_reboot.yml
+  when: k8_maintenance_step in ['maintenance', 'all']
+
+- name: Execute Step 3 - Unpause Monitors
+  include_tasks: unpause_monitors.yml
+  when: 
+    - k8_maintenance_step in ['unpause', 'all']
+    - inventory_hostname == ansible_play_hosts_all[-1]

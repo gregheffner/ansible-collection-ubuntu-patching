@@ -1,0 +1,26 @@
+---
+galaxy_info:
+  author: gregheffner
+  description: Kubernetes cluster maintenance role for patching and rebooting nodes
+  company: 
+  license: MIT
+  min_ansible_version: 2.9
+  platforms:
+    - name: Ubuntu
+      versions:
+        - bionic
+        - focal
+        - jammy
+    - name: Debian
+      versions:
+        - buster
+        - bullseye
+        - bookworm
+  galaxy_tags:
+    - kubernetes
+    - maintenance
+    - patching
+    - monitoring
+    - datadog
+
+dependencies: []

@@ -1,0 +1,19 @@
+---
+# Main tasks file for system_update role
+
+- name: Verify this is an Ubuntu system
+  fail:
+    msg: "This role is designed specifically for Ubuntu systems only"
+  when: ansible_distribution != "Ubuntu"
+
+- name: Include Docker tasks
+  include_tasks: docker.yml
+  when: update_docker | default(true)
+
+- name: Include Ubuntu package tasks
+  include_tasks: debian.yml
+  when: update_packages | default(true)
+
+- name: Include reboot tasks
+  include_tasks: reboot.yml
+  when: perform_reboot | default(true)

@@ -1,0 +1,22 @@
+---
+# Default variables for k8_maintenance role
+
+# Maintenance workflow step control
+k8_maintenance_step: "all"  # Options: pause, maintenance, unpause, all
+
+# Datadog monitoring settings
+pause_monitors_enabled: true
+pause_duration: 3600  # 1 hour in seconds
+
+# Kubernetes settings
+k8_primary_node: "k8-primary"
+reboot_delay: 30
+reboot_timeout: 600
+node_ready_retries: 30
+node_ready_delay: 10
+
+# Logging settings
+update_log_path: "/mnt/QNAP/backuplogs/updates/updates.txt"
+
+# Node processing settings
+serial_execution: 1  # Process nodes one at a time

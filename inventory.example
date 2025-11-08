@@ -1,0 +1,34 @@
+---
+# Sample inventory file for Ubuntu patching collection
+
+[ubuntu_servers]
+server1.example.com ansible_host=192.168.1.10
+server2.example.com ansible_host=192.168.1.11
+server3.example.com ansible_host=192.168.1.12
+
+[k8s_cluster]
+k8-node-01 ansible_host=192.168.1.101
+k8-node-02 ansible_host=192.168.1.102
+k8-node-03 ansible_host=192.168.1.103
+
+[docker_hosts]
+docker1.example.com ansible_host=192.168.1.20
+docker2.example.com ansible_host=192.168.1.21
+
+# Group variables
+[ubuntu_servers:vars]
+ansible_user=ubuntu
+ansible_ssh_private_key_file=~/.ssh/id_rsa
+ansible_become=true
+ansible_python_interpreter=/usr/bin/python3
+
+[k8s_cluster:vars]
+ansible_user=ubuntu
+ansible_ssh_private_key_file=~/.ssh/k8s_key
+ansible_become=true
+k8_primary_node=k8-node-01
+
+[docker_hosts:vars]
+ansible_user=ubuntu
+ansible_ssh_private_key_file=~/.ssh/docker_key
+ansible_become=true

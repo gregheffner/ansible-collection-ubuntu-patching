@@ -1,0 +1,38 @@
+namespace: gregheffner
+name: ubuntu_patching
+version: 1.0.0
+readme: README.md
+
+authors:
+  - gregheffner
+
+description: Ubuntu system patching and maintenance collection including Kubernetes cluster maintenance and automated server patching
+
+license:
+  - MIT
+
+tags:
+  - ubuntu
+  - maintenance
+  - patching
+  - kubernetes
+  - system
+  - monitoring
+  - datadog
+  - updates
+  - security
+
+dependencies: {}
+
+repository: https://github.com/gregheffner/ansible-collection-ubuntu-patching
+documentation: https://github.com/gregheffner/ansible-collection-ubuntu-patching
+homepage: https://github.com/gregheffner/ansible-collection-ubuntu-patching
+issues: https://github.com/gregheffner/ansible-collection-ubuntu-patching/issues
+
+build_ignore:
+  - '*.tar.gz'
+  - '.git'
+  - '.gitignore'
+  - 'tests/'
+  - '**/*.pyc'
+  - '**/*.retry'

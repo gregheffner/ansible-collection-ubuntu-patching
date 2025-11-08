@@ -1,0 +1,29 @@
+---
+galaxy_info:
+  author: gregheffner
+  description: Comprehensive system update role for Ubuntu with Docker support, package management, and optional reboots
+  company: 
+  
+  license: MIT
+  
+  min_ansible_version: "2.9"
+  
+  platforms:
+    - name: Ubuntu
+      versions:
+        - focal
+        - jammy
+        - noble
+  
+  galaxy_tags:
+    - system
+    - update
+    - maintenance
+    - docker
+    - reboot
+    - packages
+    - automation
+    - patching
+    - ubuntu
+
+dependencies: []

@@ -1,0 +1,60 @@
+---
+# System reboot tasks
+
+- name: Check if reboot is required (Debian/Ubuntu)
+  stat:
+    path: /var/run/reboot-required
+  register: reboot_required_debian
+  when: ansible_os_family == "Debian"
+
+- name: Reboot system (legacy method)
+  shell: systemctl reboot -i
+  ignore_errors: true
+  become: true
+  when: 
+    - perform_reboot | default(false)
+    - (force_reboot | default(false)) or (reboot_required_debian.stat.exists | default(false))
+    - (reboot_method | default('legacy') == 'legacy') or (ansible_connection == 'local')
+  async: 1
+  poll: 0
+
+- name: Reboot and wait for system to come back (remote only)
+  reboot:
+    reboot_timeout: "{{ reboot_timeout | default(600) }}"
+    connect_timeout: "{{ connect_timeout | default(20) }}"
+    test_command: whoami
+  become: true
+  when: 
+    - perform_reboot | default(false)
+    - (force_reboot | default(false)) or (reboot_required_debian.stat.exists | default(false))
+    - reboot_method | default('modern') == 'modern'
+    - ansible_connection != 'local'
+
+- name: Wait for system to come back after legacy reboot
+  wait_for_connection:
+    connect_timeout: "{{ connect_timeout | default(20) }}"
+    sleep: 5
+    delay: 10
+    timeout: "{{ reboot_timeout | default(600) }}"
+  become: false
+  when: 
+    - perform_reboot | default(false)
+    - (force_reboot | default(false)) or (reboot_required_debian.stat.exists | default(false))
+    - (reboot_method | default('legacy') == 'legacy') or (ansible_connection == 'local')
+
+- name: Run post-reboot script if specified
+  shell: |
+    cd {{ post_reboot_script_path | dirname }}
+    source {{ post_reboot_script_path | basename }}
+  when: 
+    - post_reboot_script_path is defined
+    - post_reboot_script_path != ""
+  register: post_reboot_result
+  ignore_errors: true
+
+- name: Display post-reboot script result
+  debug:
+    msg: "Post-reboot script executed: {{ 'SUCCESS' if post_reboot_result.rc == 0 else 'FAILED' }}"
+  when: 
+    - post_reboot_script_path is defined
+    - post_reboot_result is defined

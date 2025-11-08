@@ -1,0 +1,33 @@
+---
+# Kubernetes node reboot and maintenance tasks
+- name: Drain the node
+  command: kubectl drain {{ inventory_hostname }} --ignore-daemonsets --delete-emptydir-data --force --timeout=300s
+  delegate_to: "{{ k8_primary_node | default('k8-primary') }}"
+  register: drain_result
+  failed_when: drain_result.rc != 0
+
+- name: Reboot the node
+  shell: systemctl reboot
+  async: 1
+  poll: 0
+  ignore_errors: true
+  become: true
+
+- name: Wait for SSH to come back
+  wait_for_connection:
+    delay: "{{ reboot_delay | default(30) }}"
+    timeout: "{{ reboot_timeout | default(600) }}"
+
+- name: Wait for node to be ready
+  command: kubectl get node {{ inventory_hostname }} -o jsonpath='{.status.conditions[?(@.type=="Ready")].status}'
+  delegate_to: "{{ k8_primary_node | default('k8-primary') }}"
+  register: node_status
+  until: node_status.stdout == "True"
+  retries: "{{ node_ready_retries | default(30) }}"
+  delay: "{{ node_ready_delay | default(10) }}"
+
+- name: Uncordon the node
+  command: kubectl uncordon {{ inventory_hostname }}
+  delegate_to: "{{ k8_primary_node | default('k8-primary') }}"
+  register: uncordon_result
+  failed_when: uncordon_result.rc != 0

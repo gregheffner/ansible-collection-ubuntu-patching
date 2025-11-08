@@ -1,0 +1,25 @@
+---
+# Docker container management tasks
+
+- name: Get list of all container IDs
+  shell: docker ps -aq
+  register: container_ids
+  changed_when: false
+  failed_when: false
+
+- name: Restart all Docker containers
+  shell: docker restart {{ item }}
+  with_items: "{{ container_ids.stdout_lines }}"
+  when: 
+    - container_ids.stdout_lines is defined
+    - container_ids.stdout_lines | length > 0
+    - restart_docker_containers | default(true)
+  register: container_restart_result
+  ignore_errors: true
+
+- name: Display Docker container restart results
+  debug:
+    msg: "Restarted {{ container_ids.stdout_lines | length }} Docker containers"
+  when: 
+    - container_ids.stdout_lines is defined
+    - container_ids.stdout_lines | length > 0

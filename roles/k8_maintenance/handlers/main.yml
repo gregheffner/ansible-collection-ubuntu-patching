@@ -1,0 +1,14 @@
+---
+# Handlers for k8_maintenance role
+
+- name: restart kubelet
+  systemd:
+    name: kubelet
+    state: restarted
+  become: true
+
+- name: restart docker
+  systemd:
+    name: docker
+    state: restarted
+  become: true

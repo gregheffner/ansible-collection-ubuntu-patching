@@ -1,0 +1,45 @@
+---
+# Update and upgrade tasks for Kubernetes nodes
+- name: Update all APT packages
+  become: true
+  apt:
+    name: '*'
+    state: latest
+  when: ansible_os_family == "Debian"
+
+- name: Upgrade OS
+  become: true
+  apt:
+    upgrade: dist
+  when: ansible_os_family == "Debian"
+
+- name: Truncate Nginx logs
+  become: true
+  shell: sudo truncate -s 0 /var/log/nginx/access.log /var/log/nginx/error.log
+
+- name: Append to local file
+  delegate_to: localhost
+  block:
+    - name: Ensure log directory exists
+      file:
+        path: "{{ (update_log_path | default('/mnt/QNAP/backuplogs/updates/updates.txt')) | dirname }}"
+        state: directory
+        mode: '0755'
+      
+    - name: Append update entry to log
+      lineinfile:
+        path: "{{ update_log_path | default('/mnt/QNAP/backuplogs/updates/updates.txt') }}"
+        line: "Last update on {{ inventory_hostname }}: {{ ansible_date_time.date }} {{ ansible_date_time.time }}"
+        create: yes
+        mode: '0644'
+  rescue:
+    - name: Log update entry locally as fallback
+      lineinfile:
+        path: "/tmp/k8_maintenance_updates.log"
+        line: "Last update on {{ inventory_hostname }}: {{ ansible_date_time.date }} {{ ansible_date_time.time }}"
+        create: yes
+        mode: '0644'
+      
+    - name: Display fallback log location
+      debug:
+        msg: "Network path unavailable, logged to /tmp/k8_maintenance_updates.log"

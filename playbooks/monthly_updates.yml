@@ -1,0 +1,18 @@
+---
+# Monthly Comprehensive Ubuntu Updates
+# More comprehensive updates including distribution upgrades
+
+- name: Monthly Comprehensive Ubuntu Updates  
+  hosts: ubuntu_servers
+  become: true
+  vars:
+    perform_dist_upgrade: true        # More comprehensive updates
+    perform_reboot: true
+    update_docker: true
+    cleanup_packages: true
+    force_reboot: false              # Only reboot if needed
+  roles:
+    - gregheffner.ubuntu.ubuntu_update
+  tags:
+    - monthly
+    - comprehensive

@@ -1,0 +1,18 @@
+---
+# Ubuntu System Update Playbooks - Weekly Safe Updates
+# Recommended for automation - conservative settings
+
+- name: Weekly Safe Ubuntu Updates
+  hosts: ubuntu_servers
+  become: true
+  vars:
+    perform_dist_upgrade: false        # Safe for automation
+    perform_reboot: true              # Reboot after updates
+    update_docker: true               # Restart Docker containers
+    cleanup_packages: true           # Clean up unused packages
+    reboot_method: "modern"          # Use modern reboot module
+  roles:
+    - gregheffner.ubuntu_patching.ubuntu_update
+  tags:
+    - weekly
+    - safe
