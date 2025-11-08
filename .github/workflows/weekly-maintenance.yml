@@ -1,0 +1,205 @@
+---
+name: Sequential Infrastructure Maintenance
+
+on:
+  schedule:
+    # Runs every Saturday at 6:00 AM UTC (adjust timezone as needed)
+    - cron: '0 6 * * 6'
+  
+  # Allow manual triggering for testing
+  workflow_dispatch:
+    inputs:
+      skip_tls_verify:
+        description: 'Skip TLS verification for K8s'
+        required: false
+        default: true
+        type: boolean
+      dry_run:
+        description: 'Run in check mode (dry run)'
+        required: false
+        default: false
+        type: boolean
+
+jobs:
+  sequential-maintenance:
+    name: Sequential Infrastructure Maintenance (K8s → Docker)
+    runs-on: self-hosted  # Use your local runner
+    timeout-minutes: 300  # 5 hours timeout for complete sequential maintenance
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      
+      - name: Set up environment variables
+        run: |
+          # Set 1Password service account token
+          echo "OP_SERVICE_ACCOUNT_TOKEN=$(cat /home/ansible/scripts/op-signin/op_token)" >> $GITHUB_ENV
+          
+          # Set maintenance timestamp
+          echo "MAINTENANCE_START=$(date '+%Y-%m-%d %H:%M:%S')" >> $GITHUB_ENV
+          echo "WORKFLOW_ID=${{ github.run_id }}" >> $GITHUB_ENV
+      
+      - name: Install/Update Ansible Collection
+        run: |
+          # Install the latest version of the collection
+          ansible-galaxy collection install gregheffner.ubuntu_patching --force
+          echo "✅ Collection installed/updated successfully"
+      
+      - name: Verify inventory and connectivity
+        run: |
+          echo "🔍 Testing connectivity to all hosts..."
+          
+          # Test K8s cluster connectivity
+          echo "Testing K8s cluster hosts:"
+          ansible k8s_cluster -i inventory/hosts.ini -m ping --one-line
+          
+          # Test Docker host connectivity  
+          echo "Testing Docker hosts:"
+          ansible docker -i inventory/hosts.ini -m ping --one-line
+          
+          echo "✅ All hosts are reachable"
+      
+      - name: Run Sequential Infrastructure Maintenance
+        id: maintenance
+        run: |
+          set -e  # Exit on any error
+          
+          echo "🚀 Starting Sequential Infrastructure Maintenance"
+          echo "Phase 1: K8s Cluster Maintenance"
+          echo "Phase 2: Docker Host Maintenance"
+          echo ""
+          
+          # Determine run mode
+          if [ "${{ inputs.dry_run }}" == "true" ]; then
+            CHECK_MODE="--check"
+            echo "🧪 Running in DRY RUN mode (no actual changes)"
+          else
+            CHECK_MODE=""
+            echo "� Running LIVE maintenance (making actual changes)"
+          fi
+          
+          # Set TLS verification for K8s
+          if [ "${{ inputs.skip_tls_verify }}" == "true" ]; then
+            TLS_VERIFY="k8s_skip_tls_verify=true"
+            echo "⚠️  Skipping TLS verification for K8s API"
+          else
+            TLS_VERIFY="k8s_skip_tls_verify=false"
+            echo "🔒 Using TLS verification for K8s API"
+          fi
+          
+          echo ""
+          echo "▶️  Executing sequential_maintenance.yml..."
+          
+          # Run the sequential maintenance playbook
+          ansible-playbook sequential_maintenance.yml \
+            -i inventory/hosts.ini \
+            --extra-vars "$TLS_VERIFY" \
+            $CHECK_MODE \
+            -v
+          
+          echo ""
+          echo "✅ Sequential maintenance completed successfully!"
+        env:
+          OP_SERVICE_ACCOUNT_TOKEN: ${{ env.OP_SERVICE_ACCOUNT_TOKEN }}
+      
+      - name: Log maintenance completion
+        run: |
+          # Log to your automation log file
+          if [ "${{ steps.maintenance.outcome }}" == "success" ]; then
+            STATUS="SUCCESS"
+            MESSAGE="Sequential infrastructure maintenance completed successfully"
+          else
+            STATUS="FAILED"
+            MESSAGE="Sequential infrastructure maintenance failed"
+          fi
+          
+          echo "[${{ env.MAINTENANCE_START }}] $STATUS: $MESSAGE (Workflow: ${{ env.WORKFLOW_ID }})" >> /mnt/QNAP/backuplogs/ansible-automation.log
+      
+      - name: Generate maintenance report
+        if: always()  # Run even if previous steps failed
+        run: |
+          # Create a comprehensive maintenance report
+          cat > maintenance-report.md << EOF
+          # Sequential Infrastructure Maintenance Report
+          
+          **Date:** ${{ env.MAINTENANCE_START }}  
+          **Workflow ID:** ${{ github.run_id }}  
+          **Status:** ${{ job.status }}  
+          **Runner:** $(hostname)  
+          **Repository:** ${{ github.repository }}  
+          **Branch:** ${{ github.ref_name }}  
+          
+          ## Maintenance Phases
+          
+          ### Phase 1: K8s Cluster Maintenance
+          - **Target:** k8s_cluster group
+          - **Actions:** System updates, node draining, reboots, monitor management
+          - **Serial execution:** One node at a time for safety
+          
+          ### Phase 2: Docker Host Maintenance  
+          - **Target:** docker group
+          - **Actions:** System updates, Docker container management, reboots
+          - **Execution:** After K8s cluster maintenance completion
+          
+          ## Configuration
+          - **TLS Verification:** ${{ inputs.skip_tls_verify == 'true' && 'Disabled' || 'Enabled' }}
+          - **Run Mode:** ${{ inputs.dry_run == 'true' && 'Dry Run (Check Mode)' || 'Live Maintenance' }}
+          - **Timeout:** 5 hours
+          
+          ## Logs
+          - K8s logs: `/tmp/k8s_maintenance.log`
+          - Docker logs: `/tmp/docker_maintenance.log`
+          - Automation log: `/mnt/QNAP/backuplogs/ansible-automation.log`
+          EOF
+          
+          # Add timestamp to log
+          echo "[${{ env.MAINTENANCE_START }}] Maintenance report generated (ID: ${{ github.run_id }})" >> /mnt/QNAP/backuplogs/ansible-automation.log
+
+      - name: Upload maintenance logs and artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sequential-maintenance-logs-${{ github.run_number }}
+          path: |
+            maintenance-report.md
+            /tmp/k8s_maintenance.log
+            /tmp/docker_maintenance.log
+          retention-days: 30
+
+  notify-completion:
+    name: Send Notification
+    needs: sequential-maintenance
+    runs-on: self-hosted
+    if: always()  # Run even if maintenance failed
+    
+    steps:
+      - name: Send completion notification
+        run: |
+          if [ "${{ needs.sequential-maintenance.result }}" == "success" ]; then
+            STATUS="✅ SUCCESS"
+            MESSAGE="Sequential infrastructure maintenance completed successfully"
+            EMOJI="🎉"
+          else
+            STATUS="❌ FAILED" 
+            MESSAGE="Sequential infrastructure maintenance failed - check logs"
+            EMOJI="🚨"
+          fi
+          
+          # Comprehensive log entry
+          cat >> /mnt/QNAP/backuplogs/ansible-automation.log << EOF
+          [$(date '+%Y-%m-%d %H:%M:%S')] === WEEKLY MAINTENANCE SUMMARY ===
+          Status: $STATUS
+          Message: $MESSAGE  
+          Workflow: ${{ github.run_id }}
+          Duration: ${{ github.event.workflow_run.duration || 'Unknown' }}
+          Runner: $(hostname)
+          ================================================================
+          EOF
+          
+          echo "$EMOJI $MESSAGE"
+          
+          # You can add email/Slack/webhook notifications here
+          # Example webhook notification:
+          # curl -X POST "YOUR_WEBHOOK_URL" \
+          #   -H "Content-Type: application/json" \
+          #   -d "{\"text\": \"$EMOJI $MESSAGE\"}"
