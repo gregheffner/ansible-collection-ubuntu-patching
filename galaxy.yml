@@ -1,12 +1,12 @@
 namespace: gregheffner
 name: ubuntu_patching
-version: 1.0.0
+version: 1.1.0
 readme: README.md
 
 authors:
   - gregheffner
 
-description: Ubuntu system patching and maintenance collection including Kubernetes cluster maintenance and automated server patching
+description: Complete Ubuntu system maintenance collection - run all roles together for comprehensive patching, Kubernetes cluster maintenance, and automated infrastructure updates
 
 license:
   - MIT
@@ -21,6 +21,10 @@ tags:
   - datadog
   - updates
   - security
+  - automation
+  - infrastructure
+  - complete
+  - comprehensive
 
 dependencies: {}
 
