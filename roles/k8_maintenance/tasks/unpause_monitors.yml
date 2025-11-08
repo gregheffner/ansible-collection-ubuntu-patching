@@ -1,17 +1,25 @@
 ---
 # Unpause Datadog monitors and synthetic tests
-- name: Check for Datadog API credentials
-  fail:
-    msg: "Please set DATADOG_API_KEY and DATADOG_APP_KEY environment variables"
-  when: 
-    - ansible_env.DATADOG_API_KEY is not defined or ansible_env.DATADOG_API_KEY == ""
-    - ansible_env.DATADOG_APP_KEY is not defined or ansible_env.DATADOG_APP_KEY == ""
+- name: Get Datadog API key from 1Password
+  shell: op read "op://Secure APIs/vault_dd_api_key/password"
+  register: dd_api_key_result
+  no_log: true
   delegate_to: localhost
+  environment:
+    OP_SERVICE_ACCOUNT_TOKEN: "{{ ansible_env.OP_SERVICE_ACCOUNT_TOKEN }}"
 
-- name: Set API key variables from environment
+- name: Get Datadog Application key from 1Password
+  shell: op read "op://Secure APIs/vault_dd_app_key/password"
+  register: dd_app_key_result
+  no_log: true
+  delegate_to: localhost
+  environment:
+    OP_SERVICE_ACCOUNT_TOKEN: "{{ ansible_env.OP_SERVICE_ACCOUNT_TOKEN }}"
+
+- name: Set API key variables
   set_fact:
-    datadog_api_key: "{{ ansible_env.DATADOG_API_KEY }}"
-    datadog_app_key: "{{ ansible_env.DATADOG_APP_KEY }}"
+    datadog_api_key: "{{ dd_api_key_result.stdout }}"
+    datadog_app_key: "{{ dd_app_key_result.stdout }}"
   no_log: true
   delegate_to: localhost
 

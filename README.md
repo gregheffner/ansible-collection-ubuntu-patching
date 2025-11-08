@@ -712,14 +712,17 @@ connect_timeout: 20
 
 ### For K8s Maintenance
 
-1. **Environment Variables (Recommended)**
-   Set Datadog API credentials as environment variables:
+1. **1Password Service Account Setup**
+   Set up 1Password CLI with service account token:
    ```bash
-   export DATADOG_API_KEY="your_api_key_here"
-   export DATADOG_APP_KEY="your_app_key_here"
+   export OP_SERVICE_ACCOUNT_TOKEN=$(cat /home/ansible/scripts/op-signin/op_token)
    ```
 
-   Or get them from 1Password:
+   Store Datadog credentials in 1Password:
+   - `op://Secure APIs/vault_dd_api_key/password` - Datadog API key
+   - `op://Secure APIs/vault_dd_app_key/password` - Datadog Application key
+
+   **Alternative - Environment Variables:**
    ```bash
    export DATADOG_API_KEY=$(op read "op://Secure APIs/vault_dd_api_key/password")
    export DATADOG_APP_KEY=$(op read "op://Secure APIs/vault_dd_app_key/password")
