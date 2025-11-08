@@ -81,18 +81,21 @@ jobs:
           echo "Current directory: $(pwd)"
           echo "SSH config directory: $(ls -la ~/.ssh/ || echo 'No .ssh directory')"
           
-          # Test direct SSH first
-          echo "Testing direct SSH to k8-primary:"
-          ssh -o ConnectTimeout=5 -o StrictHostKeyChecking=no k8-primary "echo 'Direct SSH works'" || echo "Direct SSH failed"
+          # Test direct SSH first (using IP from inventory)
+          echo "Testing direct SSH to k8-primary (192.168.1.190):"
+          ssh -o ConnectTimeout=5 -o StrictHostKeyChecking=no 192.168.1.190 "echo 'Direct SSH works'" || echo "Direct SSH failed"
           
-          # Test K8s cluster connectivity with verbose output for debugging
+          # Test K8s cluster connectivity 
           echo "Testing K8s cluster hosts with ansible:"
-          if ansible k8s_cluster -m ping --one-line -vv 2>&1 | tee /tmp/k8s_debug.log; then
+          ansible k8s_cluster -m ping --one-line > /home/ansible/k8s_debug.log 2>&1
+          if [ $? -eq 0 ]; then
             echo "✅ K8s cluster hosts reachable"
+            echo "📊 Connection Summary:"
+            grep "SUCCESS" /home/ansible/k8s_debug.log || echo "All hosts responded"
           else
             echo "❌ K8s cluster connectivity failed"
             echo "Debug output:"
-            cat /tmp/k8s_debug.log | head -20
+            cat /home/ansible/k8s_debug.log | head -20 || echo "Debug log not available"
             exit 1
           fi
           
@@ -147,16 +150,16 @@ jobs:
              ansible-playbook sequential_maintenance.yml \
              --extra-vars "$TLS_VERIFY" \
              $CHECK_MODE \
-             --one-line > /tmp/maintenance_summary.log 2>&1; then
+             --one-line > /home/ansible/maintenance_summary.log 2>&1; then
             echo "✅ Sequential maintenance completed successfully!"
             # Show only summary, not sensitive details
             echo "📊 Maintenance Summary:"
-            grep -E "(PLAY RECAP|ok=|changed=|failed=)" /tmp/maintenance_summary.log | head -10 || echo "Summary not available"
+            grep -E "(PLAY RECAP|ok=|changed=|failed=)" /home/ansible/maintenance_summary.log | head -10 || echo "Summary not available"
           else
             echo "❌ Sequential maintenance failed!"
             # Show only error indicators, not sensitive details
             echo "📊 Error Summary:"
-            grep -E "(fatal|FAILED|ERROR)" /tmp/maintenance_summary.log | head -5 || echo "Error details logged locally"
+            grep -E "(fatal|FAILED|ERROR)" /home/ansible/maintenance_summary.log | head -5 || echo "Error details logged locally"
             exit 1
           fi
         env:
@@ -215,10 +218,11 @@ jobs:
         if: always()
         run: |
           # Remove any temporary files that might contain sensitive data
-          rm -f /tmp/maintenance_summary.log
-          rm -f /tmp/k8s_maintenance.log 
-          rm -f /tmp/docker_maintenance.log
-          rm -f /tmp/ansible-*.log
+          rm -f /home/ansible/maintenance_summary.log
+          rm -f /home/ansible/k8s_debug.log
+          rm -f /home/ansible/k8s_maintenance.log 
+          rm -f /home/ansible/docker_maintenance.log
+          rm -f /home/ansible/ansible-*.log
           echo "🧹 Cleaned up temporary files"
 
   notify-completion:
