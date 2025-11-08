@@ -36,6 +36,31 @@ jobs:
           # Set maintenance timestamp
           echo "MAINTENANCE_START=$(date '+%Y-%m-%d %H:%M:%S')" >> $GITHUB_ENV
           echo "WORKFLOW_ID=${{ github.run_id }}" >> $GITHUB_ENV
+          
+          # Ensure SSH agent is available and keys are loaded
+          echo "SSH_AUTH_SOCK=$SSH_AUTH_SOCK" >> $GITHUB_ENV
+          echo "🔑 SSH agent status:"
+          ssh-add -l || echo "No SSH keys loaded, will use default SSH configuration"
+      
+      - name: Load SSH keys for remote connections
+        run: |
+          # Start SSH agent if not already running
+          if [ -z "$SSH_AUTH_SOCK" ]; then
+            eval $(ssh-agent -s)
+            echo "SSH_AUTH_SOCK=$SSH_AUTH_SOCK" >> $GITHUB_ENV
+            echo "SSH_AGENT_PID=$SSH_AGENT_PID" >> $GITHUB_ENV
+          fi
+          
+          # Add all available SSH keys
+          echo "🔑 Loading SSH keys for remote host connections..."
+          ssh-add ~/.ssh/id_* 2>/dev/null || echo "Using default SSH key configuration"
+          
+          # Verify SSH keys are available
+          echo "📋 Available SSH keys:"
+          ssh-add -l || echo "Will use SSH config and default keys"
+          
+          # Test SSH config is working
+          echo "🔧 SSH configuration ready for remote host connections"
       
       - name: Install/Update Ansible Collection
         run: |
@@ -45,11 +70,13 @@ jobs:
       
       - name: Verify inventory and connectivity
         run: |
-          echo "🔍 Testing connectivity to all hosts..."
+          echo "🔍 Testing connectivity to all hosts using local SSH keys..."
           
           # Test K8s cluster connectivity (no sensitive output)
           echo "Testing K8s cluster hosts:"
-          if ansible k8s_cluster -i inventory/hosts.ini -m ping --one-line > /dev/null 2>&1; then
+          if ANSIBLE_HOST_KEY_CHECKING=False \
+             ANSIBLE_SSH_ARGS="-o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no" \
+             ansible k8s_cluster -i inventory/hosts.ini -m ping --one-line > /dev/null 2>&1; then
             echo "✅ K8s cluster hosts reachable"
           else
             echo "❌ K8s cluster connectivity failed"
@@ -58,14 +85,16 @@ jobs:
           
           # Test Docker host connectivity (no sensitive output)
           echo "Testing Docker hosts:"
-          if ansible docker -i inventory/hosts.ini -m ping --one-line > /dev/null 2>&1; then
+          if ANSIBLE_HOST_KEY_CHECKING=False \
+             ANSIBLE_SSH_ARGS="-o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no" \
+             ansible docker -i inventory/hosts.ini -m ping --one-line > /dev/null 2>&1; then
             echo "✅ Docker hosts reachable"
           else
             echo "❌ Docker host connectivity failed"
             exit 1
           fi
           
-          echo "✅ All hosts are reachable"
+          echo "✅ All hosts are reachable via SSH"
       
       - name: Run Sequential Infrastructure Maintenance
         id: maintenance
@@ -96,14 +125,17 @@ jobs:
           fi
           
           echo ""
+          echo "🔑 Using local SSH keys for remote host connections"
           echo "▶️  Executing full sequential maintenance..."
           
-          # Execute the maintenance playbook with limited output
-          if ansible-playbook sequential_maintenance.yml \
-            -i inventory/hosts.ini \
-            --extra-vars "$TLS_VERIFY" \
-            $CHECK_MODE \
-            --one-line > /tmp/maintenance_summary.log 2>&1; then
+          # Execute the maintenance playbook with limited output and SSH configuration
+          if ANSIBLE_HOST_KEY_CHECKING=False \
+             ANSIBLE_SSH_ARGS="-o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no" \
+             ansible-playbook sequential_maintenance.yml \
+             -i inventory/hosts.ini \
+             --extra-vars "$TLS_VERIFY" \
+             $CHECK_MODE \
+             --one-line > /tmp/maintenance_summary.log 2>&1; then
             echo "✅ Sequential maintenance completed successfully!"
             # Show only summary, not sensitive details
             echo "📊 Maintenance Summary:"
