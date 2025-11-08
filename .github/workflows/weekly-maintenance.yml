@@ -1,12 +1,10 @@
 ---
-name: Sequential Infrastructure Maintenance
+name: Weekly Infrastructure Maintenance
 
 on:
   schedule:
-    # Runs every Saturday at 6:00 AM UTC (adjust timezone as needed)
+    # Run every Saturday at 6:00 AM UTC
     - cron: '0 6 * * 6'
-  
-  # Allow manual triggering for testing
   workflow_dispatch:
     inputs:
       skip_tls_verify:
@@ -74,7 +72,7 @@ jobs:
         run: |
           set -e  # Exit on any error
           
-          echo "🚀 Starting Sequential Infrastructure Maintenance"
+          echo "🚀 Starting Full Sequential Infrastructure Maintenance"
           echo "Phase 1: K8s Cluster Maintenance"
           echo "Phase 2: Docker Host Maintenance"
           echo ""
@@ -85,7 +83,7 @@ jobs:
             echo "🧪 Running in DRY RUN mode (no actual changes)"
           else
             CHECK_MODE=""
-            echo "� Running LIVE maintenance (making actual changes)"
+            echo "🔧 Running LIVE maintenance (making actual changes)"
           fi
           
           # Set TLS verification for K8s
@@ -98,9 +96,9 @@ jobs:
           fi
           
           echo ""
-          echo "▶️  Executing sequential_maintenance.yml..."
+          echo "▶️  Executing full sequential maintenance..."
           
-          # Run the sequential maintenance playbook with limited output
+          # Execute the maintenance playbook with limited output
           if ansible-playbook sequential_maintenance.yml \
             -i inventory/hosts.ini \
             --extra-vars "$TLS_VERIFY" \
@@ -123,12 +121,17 @@ jobs:
       - name: Log maintenance completion
         run: |
           # Log to your automation log file
+          DRY_RUN_STATUS=""
+          if [ "${{ inputs.dry_run }}" == "true" ]; then
+            DRY_RUN_STATUS=" (DRY RUN)"
+          fi
+          
           if [ "${{ steps.maintenance.outcome }}" == "success" ]; then
             STATUS="SUCCESS"
-            MESSAGE="Sequential infrastructure maintenance completed successfully"
+            MESSAGE="Full sequential infrastructure maintenance completed successfully$DRY_RUN_STATUS"
           else
             STATUS="FAILED"
-            MESSAGE="Sequential infrastructure maintenance failed"
+            MESSAGE="Full sequential infrastructure maintenance failed$DRY_RUN_STATUS"
           fi
           
           echo "[${{ env.MAINTENANCE_START }}] $STATUS: $MESSAGE (Workflow: ${{ env.WORKFLOW_ID }})" >> /mnt/QNAP/backuplogs/ansible-automation.log
