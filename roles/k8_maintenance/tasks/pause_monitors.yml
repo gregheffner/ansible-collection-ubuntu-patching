@@ -5,22 +5,18 @@
     filter: ansible_date_time
   delegate_to: localhost
 
-- name: Get Datadog API key from 1Password
-  shell: op read "op://Secure APIs/vault_dd_api_key/password"
-  register: dd_api_key_result
-  no_log: true
+- name: Check for Datadog API credentials
+  fail:
+    msg: "Please set DATADOG_API_KEY and DATADOG_APP_KEY environment variables"
+  when: 
+    - ansible_env.DATADOG_API_KEY is not defined or ansible_env.DATADOG_API_KEY == ""
+    - ansible_env.DATADOG_APP_KEY is not defined or ansible_env.DATADOG_APP_KEY == ""
   delegate_to: localhost
 
-- name: Get Datadog Application key from 1Password
-  shell: op read "op://Secure APIs/vault_dd_app_key/password"
-  register: dd_app_key_result
-  no_log: true
-  delegate_to: localhost
-
-- name: Set API key variables
+- name: Set API key variables from environment
   set_fact:
-    datadog_api_key: "{{ dd_api_key_result.stdout }}"
-    datadog_app_key: "{{ dd_app_key_result.stdout }}"
+    datadog_api_key: "{{ ansible_env.DATADOG_API_KEY }}"
+    datadog_app_key: "{{ ansible_env.DATADOG_APP_KEY }}"
   no_log: true
   delegate_to: localhost
 

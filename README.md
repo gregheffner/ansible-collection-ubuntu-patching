@@ -712,10 +712,18 @@ connect_timeout: 20
 
 ### For K8s Maintenance
 
-1. **1Password CLI Setup**
-   Store Datadog credentials in 1Password:
-   - `op://Secure APIs/vault_dd_api_key/password`
-   - `op://Secure APIs/vault_dd_app_key/password`
+1. **Environment Variables (Recommended)**
+   Set Datadog API credentials as environment variables:
+   ```bash
+   export DATADOG_API_KEY="your_api_key_here"
+   export DATADOG_APP_KEY="your_app_key_here"
+   ```
+
+   Or get them from 1Password:
+   ```bash
+   export DATADOG_API_KEY=$(op read "op://Secure APIs/vault_dd_api_key/password")
+   export DATADOG_APP_KEY=$(op read "op://Secure APIs/vault_dd_app_key/password")
+   ```
 
 2. **Inventory Example**
    ```ini
