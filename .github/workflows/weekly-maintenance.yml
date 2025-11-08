@@ -177,14 +177,13 @@ jobs:
           # Execute the maintenance playbook with limited output and SSH configuration
           echo "🚀 Running ansible-playbook command..."
           echo "Working directory: $(pwd)"
-          echo "Command: ansible-playbook sequential_maintenance.yml --extra-vars \"$TLS_VERIFY\" $CHECK_MODE --one-line"
+          echo "Command: ansible-playbook sequential_maintenance.yml --extra-vars \"$TLS_VERIFY\" $CHECK_MODE"
           
           if ANSIBLE_HOST_KEY_CHECKING=False \
              ANSIBLE_SSH_ARGS="-o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no" \
              ansible-playbook sequential_maintenance.yml \
              --extra-vars "$TLS_VERIFY" \
-             $CHECK_MODE \
-             --one-line > /home/ansible/maintenance_summary.log 2>&1; then
+             $CHECK_MODE > /home/ansible/maintenance_summary.log 2>&1; then
             echo "✅ Sequential maintenance completed successfully!"
             # Show only summary, not sensitive details
             echo "📊 Maintenance Summary:"
