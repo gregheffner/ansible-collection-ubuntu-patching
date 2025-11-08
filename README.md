@@ -1,12 +1,74 @@
-# Running All Collection Roles - Complete System Maintenance
+# Ansible Collection - Smart All-Roles System Maintenance
 
-This guide focuses on running all roles from the `gregheffner.ubuntu_patching` collection in a single playbook for comprehensive system maintenance.
+This Ansible collection provides intelligent, comprehensive system maintenance using smart conditional role targeting. Execute all roles together with automatic host group detection for complete infrastructure maintenance.
 
 ## Overview
 
-The `gregheffner.ubuntu_patching` collection contains multiple roles that can be executed together to perform complete system maintenance across your infrastructure. This approach is ideal for scheduled maintenance windows where you want to apply all updates and maintenance tasks in one operation.
+The `gregheffner.ubuntu_patching` collection features Smart Conditional Targeting that automatically runs the appropriate roles based on host group membership. This approach is designed for complete infrastructure maintenance with a single playbook execution.
 
-## Basic All-Roles Playbook
+### Key Features
+
+- **Smart Conditional Targeting**: Automatically runs appropriate roles on correct host groups
+- **Complete System Maintenance**: K8s cluster maintenance and Ubuntu system updates
+- **Safety-First Design**: K8s maintenance runs first, serial execution prevents issues
+- **Docker Integration**: Automatic container management and restarts
+- **Datadog Integration**: Monitor pausing and unpausing during maintenance
+- **Single Playbook**: Manage entire infrastructure with one command
+
+## Quick Start
+
+```bash
+# Install the collection
+ansible-galaxy collection install gregheffner.ubuntu_patching
+
+# Run smart all-roles maintenance on your entire infrastructure
+ansible-playbook -i inventory.ini smart_all_roles.yml
+
+# Target specific groups (monthly docker updates, K8s maintenance, etc.)
+ansible-playbook -i inventory.ini smart_all_roles.yml --limit docker
+```
+
+## How Smart Targeting Works
+
+The collection automatically determines which roles run on which hosts:
+
+| Host Group | K8s Maintenance | Ubuntu Update | Use Case |
+|------------|----------------|---------------|-----------|
+| `k8s_cluster` | **YES** | No | K8s cluster maintenance only |
+| `docker` | No | **YES** | Monthly system updates for docker hosts |
+| Non-Ubuntu | No | No | Automatically skipped |
+
+## Included Roles
+
+### k8_maintenance
+
+- **Purpose**: Safe Kubernetes cluster maintenance with zero-downtime
+- **Features**: Node draining, system updates, monitor management, health checks
+- **Auto-runs on**: Hosts in `k8s_cluster` group
+- **Integrations**: Datadog monitor pausing, kubectl workflows
+
+### ubuntu_update
+
+- **Purpose**: Comprehensive Ubuntu system updates and maintenance
+- **Features**: APT updates, Docker management, package cleanup, optional reboots
+- **Auto-runs on**: All Ubuntu systems (detected automatically)
+- **Integrations**: Docker container restarts, distribution upgrades
+
+## Installation
+
+```bash
+# From Ansible Galaxy (recommended)
+ansible-galaxy collection install gregheffner.ubuntu_patching
+
+# From source
+git clone https://github.com/gregheffner/ansible-collection-ubuntu-patching.git
+cd ansible-collection-ubuntu-patching
+ansible-galaxy collection install .
+```
+
+## Basic All-Roles Playbook (Smart Conditional)
+
+This playbook automatically runs the appropriate roles based on host group membership:
 
 ```yaml
 ---
@@ -20,9 +82,20 @@ The `gregheffner.ubuntu_patching` collection contains multiple roles that can be
     update_docker: true
     pause_monitors_enabled: true
   roles:
-    - gregheffner.ubuntu_patching.k8_maintenance
-    - gregheffner.ubuntu_patching.ubuntu_update
+    # K8s maintenance only runs on hosts in k8s_cluster group
+    - role: gregheffner.ubuntu_patching.k8_maintenance
+      when: "'k8s_cluster' in group_names"
+      
+    # Ubuntu update runs only on docker hosts
+    - role: gregheffner.ubuntu_patching.ubuntu_update
+      when: "'docker' in group_names"
 ```
+
+**Key Benefits:**
+- **Automatic targeting** - roles run only on appropriate hosts
+- **Single playbook** - manages entire infrastructure  
+- **Safe execution** - K8s maintenance runs first, Ubuntu updates last
+- **No manual host selection** - uses inventory group membership
 
 ## Complete All-Roles Playbook with Full Configuration
 
@@ -93,6 +166,7 @@ The `gregheffner.ubuntu_patching` collection contains multiple roles that can be
       
     - role: gregheffner.ubuntu_patching.ubuntu_update
       tags: ['ubuntu_update', 'system_packages']
+      when: "ansible_distribution == 'Ubuntu'"
 
   post_tasks:
     - name: Verify system responsiveness
@@ -120,32 +194,24 @@ The `gregheffner.ubuntu_patching` collection contains multiple roles that can be
       delegate_to: localhost
 ```
 
-## Inventory Configuration for All-Roles Execution
+## Inventory Configuration for Smart All-Roles Execution
 
 ```ini
-# inventory.ini - Organized for all-roles execution
+# inventory.ini - Organized for smart conditional targeting
 
 [k8s_cluster]
-k8s-master-01.example.com k8_primary_node=true
+k8s-master-01.example.com
 k8s-worker-01.example.com
 k8s-worker-02.example.com
 k8s-worker-03.example.com
 
-[standard_servers]
-web-01.example.com
-web-02.example.com
-db-01.example.com
-app-01.example.com
+[docker]
+dockerhost ansible_host=localhost
 
-[docker_hosts]
-docker-01.example.com
-docker-02.example.com
-
-# All systems will get ubuntu_update, only k8s_cluster gets k8_maintenance
-[all:children]
-k8s_cluster
-standard_servers
-docker_hosts
+# Smart targeting automatically determines which roles run where:
+# - k8s_cluster hosts: Get ONLY k8_maintenance
+# - docker hosts: Get ONLY ubuntu_update (perfect for monthly updates)
+# - Any non-Ubuntu hosts: Get NO roles (automatically skipped)
 
 [all:vars]
 ansible_user=ubuntu
@@ -157,51 +223,66 @@ ansible_python_interpreter=/usr/bin/python3
 [k8s_cluster:vars]
 pause_monitors_enabled=true
 pause_duration=7200  # 2 hours for K8s maintenance
-update_log_path=/mnt/QNAP/backuplogs/updates/k8s_updates.txt
+update_log_path=/tmp/k8s_updates.log
 
-# Conservative settings for database servers
-[standard_servers:vars]
+# Docker host settings (localhost)
+[docker:vars]
 perform_dist_upgrade=false
-cleanup_packages=false
+cleanup_packages=true
+pause_monitors_enabled=false
+update_docker=true
+restart_docker_containers=true
 ```
 
-## Usage Examples
+## Real-World Usage Examples
 
-### 1. Run All Roles on All Hosts
+### Complete Infrastructure Maintenance
 ```bash
-ansible-playbook -i inventory.ini all_roles_maintenance.yml
+# Smart targeting runs appropriate roles automatically across all hosts
+ansible-playbook -i inventory.ini smart_all_roles.yml
 ```
 
-### 2. Run with Dry Run (Check Mode)
+### Monthly Docker Host Updates  
 ```bash
-ansible-playbook -i inventory.ini all_roles_maintenance.yml --check --diff
+# Target just your localhost docker environment for monthly maintenance
+ansible-playbook -i inventory.ini smart_all_roles.yml --limit docker
 ```
 
-### 3. Run Only Ubuntu Updates (Skip K8s Maintenance)
+### Quick Testing & Validation
 ```bash
-ansible-playbook -i inventory.ini all_roles_maintenance.yml --tags ubuntu_update
+# Dry run to see what would happen without making changes
+ansible-playbook -i inventory.ini smart_all_roles.yml --check --diff
+
+# Test on just the docker host first
+ansible-playbook -i inventory.ini smart_all_roles.yml --limit docker
+
+# Test on just the K8s cluster
+ansible-playbook -i inventory.ini smart_all_roles.yml --limit k8s_cluster
 ```
 
-### 4. Run Only K8s Maintenance (Skip Ubuntu Updates)
+### Selective Role Execution
 ```bash
-ansible-playbook -i inventory.ini all_roles_maintenance.yml --tags k8s_maintenance
+# Only Ubuntu updates (skip K8s maintenance)
+ansible-playbook -i inventory.ini smart_all_roles.yml --tags ubuntu_update
+
+# Only K8s maintenance (skip Ubuntu updates)
+ansible-playbook -i inventory.ini smart_all_roles.yml --tags k8s_maintenance
 ```
 
-**Important**: When running all roles together, K8s maintenance always runs first to prevent playbook interruption if the Ansible control node gets rebooted by ubuntu_update.
-
-### 5. Override Variables at Runtime
+### Production Safety Mode
 ```bash
-ansible-playbook -i inventory.ini all_roles_maintenance.yml \
-  --extra-vars "perform_reboot=false pause_monitors_enabled=false"
+# Conservative mode - no reboots, no distribution upgrades
+ansible-playbook -i inventory.ini smart_all_roles.yml \
+  --extra-vars "perform_reboot=false perform_dist_upgrade=false"
 ```
 
 ### 6. Target Specific Host Groups
 ```bash
 # Only K8s cluster
-ansible-playbook -i inventory.ini all_roles_maintenance.yml --limit k8s_cluster
+ansible-playbook -i inventory.ini smart_all_roles.yml --limit k8s_cluster
 
-# Only standard servers
-ansible-playbook -i inventory.ini all_roles_maintenance.yml --limit standard_servers
+# Only docker hosts
+ansible-playbook -i inventory.ini smart_all_roles.yml --limit docker
 ```
 
 ## Variable Precedence and Customization
@@ -221,7 +302,7 @@ vars:
 pause_monitors_enabled: true
 pause_duration: 7200
 
-# group_vars/standard_servers.yml  
+# group_vars/docker.yml  
 perform_dist_upgrade: false
 cleanup_packages: false
 ```
@@ -235,7 +316,7 @@ update_docker: false   # No Docker on database servers
 
 ### 4. Command Line (Highest Priority)
 ```bash
-ansible-playbook all_roles_maintenance.yml --extra-vars "perform_reboot=false"
+ansible-playbook smart_all_roles.yml --extra-vars "perform_reboot=false"
 ```
 
 ## Safety Considerations
@@ -285,7 +366,7 @@ update_log_path: "/mnt/QNAP/backuplogs/updates/updates.txt"
 LOG_DIR="./maintenance_logs/$(date +%Y%m%d_%H%M%S)"
 mkdir -p "$LOG_DIR"
 
-ansible-playbook all_roles_maintenance.yml | tee "$LOG_DIR/maintenance.log"
+ansible-playbook smart_all_roles.yml | tee "$LOG_DIR/maintenance.log"
 ```
 
 ### Post-Execution Verification
@@ -351,7 +432,7 @@ kubectl get pods --all-namespaces | grep -v Running
 
 1. **Always Test First**
    ```bash
-   ansible-playbook all_roles_maintenance.yml --check --diff --limit test_host
+   ansible-playbook smart_all_roles.yml --check --diff --limit docker
    ```
 
 2. **Use Maintenance Windows**
@@ -366,31 +447,31 @@ kubectl get pods --all-namespaces | grep -v Running
 
 4. **Gradual Rollout**
    ```bash
-   # Test on one host first
-   ansible-playbook all_roles_maintenance.yml --limit test_host
+   # Test on docker host first
+   ansible-playbook smart_all_roles.yml --limit docker
    
-   # Then small groups
-   ansible-playbook all_roles_maintenance.yml --limit web_servers
+   # Then K8s cluster
+   ansible-playbook smart_all_roles.yml --limit k8s_cluster
    
    # Finally full deployment
-   ansible-playbook all_roles_maintenance.yml
+   ansible-playbook smart_all_roles.yml
    ```
 
 ## Example Maintenance Script
 
 ```bash
 #!/bin/bash
-# complete_maintenance.sh - Run all collection roles safely
+# complete_maintenance.sh - Run all collection roles safely with smart targeting
 
 set -e
 
 INVENTORY="inventory.ini"
-PLAYBOOK="all_roles_maintenance.yml"
+PLAYBOOK="smart_all_roles.yml"  # Smart conditional playbook
 LOG_DIR="./maintenance_logs/$(date +%Y%m%d_%H%M%S)"
 
 mkdir -p "$LOG_DIR"
 
-echo "=== Starting Complete Maintenance Workflow ==="
+echo "=== Starting Smart All-Roles Maintenance Workflow ==="
 echo "Log directory: $LOG_DIR"
 echo "Time: $(date)"
 
@@ -398,8 +479,8 @@ echo "Time: $(date)"
 echo "=== Pre-flight System Check ==="
 ansible all -i "$INVENTORY" -m ping | tee "$LOG_DIR/01_precheck.log"
 
-# Run maintenance
-echo "=== Executing All Collection Roles ==="
+# Run maintenance with smart targeting
+echo "=== Executing All Collection Roles (Smart Conditional) ==="
 ansible-playbook -i "$INVENTORY" "$PLAYBOOK" \
   --diff | tee "$LOG_DIR/02_maintenance.log"
 
@@ -427,15 +508,38 @@ echo "Time: $(date)"
 
 ## Summary
 
-Running all collection roles together provides:
+**Smart Conditional All-Roles Collection** provides:
 
-- **Comprehensive Maintenance**: Complete system updates in one operation
-- **Consistent Configuration**: Same variables applied across all roles
-- **Safe Execution**: Serial processing and built-in safety checks
-- **Flexible Control**: Tag-based execution and variable overrides
-- **Complete Logging**: Full audit trail of all maintenance activities
+- 🧠 **Intelligent Targeting**: Automatically runs the right roles on the right hosts
+- 🔒 **Production Safe**: Serial execution, conservative defaults, safety checks
+- **Zero-Downtime K8s**: Proper node draining and health validation
+- **Docker Integration**: Container lifecycle management and restarts  
+- 📊 **Monitoring Integration**: Datadog monitor management during maintenance
+- **Complete Automation**: Single playbook manages entire infrastructure
+- **Flexible Execution**: Tag-based filtering, group targeting, variable overrides
 
-This approach is ideal for scheduled maintenance windows where you need complete system updates with minimal manual intervention.
+### Perfect for:
+- **Monthly infrastructure maintenance** across mixed environments
+- **Kubernetes cluster patching** with zero downtime
+- **Docker host updates** (perfect for localhost environments)
+- **Automated maintenance windows** with comprehensive logging
+- **Production environments** requiring safety and reliability
+
+This approach eliminates the complexity of managing multiple playbooks while ensuring each host type gets exactly the maintenance it needs.
+
+## License
+
+MIT
+
+## Author Information
+
+Created by [gregheffner](https://github.com/gregheffner) for intelligent, automated Ubuntu system and Kubernetes cluster maintenance.
+
+## Support
+
+- [GitHub Repository](https://github.com/gregheffner/ansible-collection-ubuntu-patching)
+- [Issues & Support](https://github.com/gregheffner/ansible-collection-ubuntu-patching/issues)
+- [Ansible Galaxy](https://galaxy.ansible.com/gregheffner/ubuntu_patching)
 
 ## Example Playbooks
 
@@ -460,7 +564,7 @@ This approach is ideal for scheduled maintenance windows where you need complete
 ```yaml
 ---
 - name: Monthly Comprehensive System Updates
-  hosts: ubuntu_servers
+  hosts: docker
   become: true
   vars:
     perform_dist_upgrade: true        # More comprehensive

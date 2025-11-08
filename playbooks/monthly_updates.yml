@@ -3,7 +3,7 @@
 # More comprehensive updates including distribution upgrades
 
 - name: Monthly Comprehensive Ubuntu Updates  
-  hosts: ubuntu_servers
+  hosts: docker
   become: true
   vars:
     perform_dist_upgrade: true        # More comprehensive updates

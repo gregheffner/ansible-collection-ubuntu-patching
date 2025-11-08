@@ -38,7 +38,7 @@
           - Host: {{ inventory_hostname }}
           - Groups: {{ group_names }}
           - K8s Maintenance: {{ 'YES' if 'k8s_cluster' in group_names else 'NO' }}
-          - Ubuntu Update: {{ 'YES' if ansible_distribution == 'Ubuntu' else 'NO' }}
+          - Ubuntu Update: {{ 'YES' if 'docker' in group_names else 'NO' }}
 
   roles:
     # K8s maintenance runs FIRST and only on K8s cluster hosts
@@ -46,10 +46,10 @@
       tags: ['k8s_maintenance', 'kubernetes']
       when: "'k8s_cluster' in group_names"
       
-    # Ubuntu update runs LAST and only on Ubuntu systems
+    # Ubuntu update runs LAST on docker hosts only
     - role: gregheffner.ubuntu_patching.ubuntu_update
       tags: ['ubuntu_update', 'system_packages']
-      when: "ansible_distribution == 'Ubuntu'"
+      when: "'docker' in group_names"
 
   post_tasks:
     - name: Display completion status
@@ -58,5 +58,5 @@
           Smart All-Roles Maintenance Completed:
           - Host: {{ inventory_hostname }}
           - K8s Maintenance: {{ 'EXECUTED' if 'k8s_cluster' in group_names else 'SKIPPED' }}
-          - Ubuntu Update: {{ 'EXECUTED' if ansible_distribution == 'Ubuntu' else 'SKIPPED' }}
+          - Ubuntu Update: {{ 'EXECUTED' if 'docker' in group_names else 'SKIPPED' }}
           - Time: {{ ansible_date_time.iso8601 }}

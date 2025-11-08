@@ -1,0 +1,20 @@
+---
+# Inventory-Driven Targeting - Uses group_vars from inventory
+- name: Inventory-Driven All Roles Execution
+  hosts: all
+  become: true
+  serial: 1
+  vars:
+    # Default values (can be overridden by inventory group_vars)
+    run_k8s_maintenance: false
+    run_ubuntu_update: true
+    perform_reboot: true
+    update_docker: true
+    pause_monitors_enabled: false
+    
+  roles:
+    - role: gregheffner.ubuntu_patching.k8_maintenance
+      when: run_k8s_maintenance | default(false) | bool
+      
+    - role: gregheffner.ubuntu_patching.ubuntu_update
+      when: run_ubuntu_update | default(true) | bool
