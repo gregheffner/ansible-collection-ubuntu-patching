@@ -13,7 +13,6 @@
 - name: Get Datadog API key from 1Password
   shell: op read "op://Secure APIs/vault_dd_api_key/password"
   register: dd_api_key_result
-  no_log: true
   delegate_to: localhost
   environment:
     OP_SERVICE_ACCOUNT_TOKEN: "{{ lookup('env', 'OP_SERVICE_ACCOUNT_TOKEN') }}"
@@ -21,7 +20,6 @@
 - name: Get Datadog Application key from 1Password
   shell: op read "op://Secure APIs/vault_dd_app_key/password"
   register: dd_app_key_result
-  no_log: true
   delegate_to: localhost
   environment:
     OP_SERVICE_ACCOUNT_TOKEN: "{{ lookup('env', 'OP_SERVICE_ACCOUNT_TOKEN') }}"
