@@ -49,13 +49,23 @@ jobs:
         run: |
           echo "🔍 Testing connectivity to all hosts..."
           
-          # Test K8s cluster connectivity
+          # Test K8s cluster connectivity (no sensitive output)
           echo "Testing K8s cluster hosts:"
-          ansible k8s_cluster -i inventory/hosts.ini -m ping --one-line
+          if ansible k8s_cluster -i inventory/hosts.ini -m ping --one-line > /dev/null 2>&1; then
+            echo "✅ K8s cluster hosts reachable"
+          else
+            echo "❌ K8s cluster connectivity failed"
+            exit 1
+          fi
           
-          # Test Docker host connectivity  
+          # Test Docker host connectivity (no sensitive output)
           echo "Testing Docker hosts:"
-          ansible docker -i inventory/hosts.ini -m ping --one-line
+          if ansible docker -i inventory/hosts.ini -m ping --one-line > /dev/null 2>&1; then
+            echo "✅ Docker hosts reachable"
+          else
+            echo "❌ Docker host connectivity failed"
+            exit 1
+          fi
           
           echo "✅ All hosts are reachable"
       
@@ -90,15 +100,23 @@ jobs:
           echo ""
           echo "▶️  Executing sequential_maintenance.yml..."
           
-          # Run the sequential maintenance playbook
-          ansible-playbook sequential_maintenance.yml \
+          # Run the sequential maintenance playbook with limited output
+          if ansible-playbook sequential_maintenance.yml \
             -i inventory/hosts.ini \
             --extra-vars "$TLS_VERIFY" \
             $CHECK_MODE \
-            -v
-          
-          echo ""
-          echo "✅ Sequential maintenance completed successfully!"
+            --one-line > /tmp/maintenance_summary.log 2>&1; then
+            echo "✅ Sequential maintenance completed successfully!"
+            # Show only summary, not sensitive details
+            echo "📊 Maintenance Summary:"
+            grep -E "(PLAY RECAP|ok=|changed=|failed=)" /tmp/maintenance_summary.log | head -10 || echo "Summary not available"
+          else
+            echo "❌ Sequential maintenance failed!"
+            # Show only error indicators, not sensitive details
+            echo "📊 Error Summary:"
+            grep -E "(fatal|FAILED|ERROR)" /tmp/maintenance_summary.log | head -5 || echo "Error details logged locally"
+            exit 1
+          fi
         env:
           OP_SERVICE_ACCOUNT_TOKEN: ${{ env.OP_SERVICE_ACCOUNT_TOKEN }}
       
@@ -145,26 +163,34 @@ jobs:
           - **TLS Verification:** ${{ inputs.skip_tls_verify == 'true' && 'Disabled' || 'Enabled' }}
           - **Run Mode:** ${{ inputs.dry_run == 'true' && 'Dry Run (Check Mode)' || 'Live Maintenance' }}
           - **Timeout:** 5 hours
+          - **Security:** Sensitive logs excluded from uploads
           
-          ## Logs
-          - K8s logs: `/tmp/k8s_maintenance.log`
-          - Docker logs: `/tmp/docker_maintenance.log`
-          - Automation log: `/mnt/QNAP/backuplogs/ansible-automation.log`
+          ## Status
+          - **Result:** ${{ job.status }}
+          - **Summary:** Basic statistics only (no sensitive data)
           EOF
           
           # Add timestamp to log
           echo "[${{ env.MAINTENANCE_START }}] Maintenance report generated (ID: ${{ github.run_id }})" >> /mnt/QNAP/backuplogs/ansible-automation.log
 
-      - name: Upload maintenance logs and artifacts
+      - name: Upload maintenance report only (no sensitive logs)
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: sequential-maintenance-logs-${{ github.run_number }}
+          name: maintenance-report-${{ github.run_number }}
           path: |
             maintenance-report.md
-            /tmp/k8s_maintenance.log
-            /tmp/docker_maintenance.log
-          retention-days: 30
+          retention-days: 7  # Shorter retention for security
+
+      - name: Cleanup sensitive temporary files
+        if: always()
+        run: |
+          # Remove any temporary files that might contain sensitive data
+          rm -f /tmp/maintenance_summary.log
+          rm -f /tmp/k8s_maintenance.log 
+          rm -f /tmp/docker_maintenance.log
+          rm -f /tmp/ansible-*.log
+          echo "🧹 Cleaned up temporary files"
 
   notify-completion:
     name: Send Notification
