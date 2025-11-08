@@ -104,26 +104,6 @@ jobs:
             echo "Docker host connectivity failed"
             exit 1
           fi
-            echo "K8s cluster hosts reachable"
-            echo "Connection Summary:"
-            grep "SUCCESS" /home/ansible/k8s_debug.log || echo "All hosts responded"
-          else
-            echo "K8s cluster connectivity failed"
-            echo "Debug output:"
-            cat /home/ansible/k8s_debug.log | head -20 || echo "Debug log not available"
-            exit 1
-          fi
-          
-          # Test Docker host connectivity (no sensitive output)
-          echo "Testing Docker hosts:"
-          if ANSIBLE_HOST_KEY_CHECKING=False \
-             ANSIBLE_SSH_ARGS="-o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no" \
-             ansible dockerhost -m ping --one-line > /dev/null 2>&1; then
-            echo "Docker hosts reachable"
-          else
-            echo "Docker host connectivity failed"
-            exit 1
-          fi
           
           echo "All hosts reachable"
       
