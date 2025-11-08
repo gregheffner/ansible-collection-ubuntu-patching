@@ -20,8 +20,8 @@ The `gregheffner.ubuntu_patching` collection contains multiple roles that can be
     update_docker: true
     pause_monitors_enabled: true
   roles:
-    - gregheffner.ubuntu_patching.ubuntu_update
     - gregheffner.ubuntu_patching.k8_maintenance
+    - gregheffner.ubuntu_patching.ubuntu_update
 ```
 
 ## Complete All-Roles Playbook with Full Configuration
@@ -87,12 +87,12 @@ The `gregheffner.ubuntu_patching` collection contains multiple roles that can be
       run_once: true
 
   roles:
-    - role: gregheffner.ubuntu_patching.ubuntu_update
-      tags: ['ubuntu_update', 'system_packages']
-      
     - role: gregheffner.ubuntu_patching.k8_maintenance
       tags: ['k8s_maintenance', 'kubernetes']
       when: "'k8s_cluster' in group_names"
+      
+    - role: gregheffner.ubuntu_patching.ubuntu_update
+      tags: ['ubuntu_update', 'system_packages']
 
   post_tasks:
     - name: Verify system responsiveness
@@ -182,10 +182,12 @@ ansible-playbook -i inventory.ini all_roles_maintenance.yml --check --diff
 ansible-playbook -i inventory.ini all_roles_maintenance.yml --tags ubuntu_update
 ```
 
-### 4. Run Only K8s Maintenance
+### 4. Run Only K8s Maintenance (Skip Ubuntu Updates)
 ```bash
 ansible-playbook -i inventory.ini all_roles_maintenance.yml --tags k8s_maintenance
 ```
+
+**Important**: When running all roles together, K8s maintenance always runs first to prevent playbook interruption if the Ansible control node gets rebooted by ubuntu_update.
 
 ### 5. Override Variables at Runtime
 ```bash
@@ -237,6 +239,16 @@ ansible-playbook all_roles_maintenance.yml --extra-vars "perform_reboot=false"
 ```
 
 ## Safety Considerations
+
+### Role Execution Order
+```yaml
+roles:
+  - gregheffner.ubuntu_patching.k8_maintenance  # Run first
+  - gregheffner.ubuntu_patching.ubuntu_update   # Run last
+```
+- **Why K8s first**: K8s maintenance completes before any potential Ansible server reboots
+- **Why Ubuntu last**: If ubuntu_update reboots the Ansible control node, K8s tasks are already complete
+- **Benefit**: Prevents playbook interruption from control node reboots
 
 ### Serial Execution
 ```yaml
