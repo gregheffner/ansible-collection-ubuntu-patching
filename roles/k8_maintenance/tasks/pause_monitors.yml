@@ -42,13 +42,25 @@
 
 - name: Display number of monitors found
   debug:
+- name: Display number of monitors found
+  debug:
     msg: "Found {{ monitors_response.json | length }} monitors to pause"
   delegate_to: localhost
+  when: 
+    - pause_monitors_enabled | default(false)
+    - datadog_api_key is defined
+    - datadog_app_key is defined
+    - monitors_response is defined
+    - monitors_response.json is defined
+    - not ansible_check_mode
 
 - name: Calculate pause end time
   set_fact:
     pause_end_time: "{{ ansible_date_time.epoch | int + (pause_duration | default(3600)) }}"
   delegate_to: localhost
+  when:
+    - pause_monitors_enabled | default(false)
+    - not ansible_check_mode
 
 - name: Pause each monitor
   uri:
@@ -64,7 +76,13 @@
       message: "Muted during K8s maintenance - automated by Ansible"
     status_code: 200
   loop: "{{ monitors_response.json }}"
-  when: monitors_response.json is defined
+  when: 
+    - pause_monitors_enabled | default(false)
+    - datadog_api_key is defined
+    - datadog_app_key is defined
+    - monitors_response is defined
+    - monitors_response.json is defined
+    - not ansible_check_mode
   delegate_to: localhost
 
 - name: Get all synthetic tests
@@ -78,11 +96,24 @@
     status_code: 200
   register: synthetics_response
   delegate_to: localhost
+  when:
+    - pause_monitors_enabled | default(false)
+    - datadog_api_key is defined
+    - datadog_app_key is defined
+    - not ansible_check_mode
 
 - name: Display number of synthetic tests found
   debug:
     msg: "Found {{ synthetics_response.json.tests | length }} synthetic tests to pause"
   delegate_to: localhost
+  when:
+    - pause_monitors_enabled | default(false)
+    - datadog_api_key is defined
+    - datadog_app_key is defined
+    - synthetics_response is defined
+    - synthetics_response.json is defined
+    - synthetics_response.json.tests is defined
+    - not ansible_check_mode
 
 - name: Pause each synthetic test
   uri:
@@ -97,5 +128,12 @@
       new_status: "paused"
     status_code: 200
   loop: "{{ synthetics_response.json.tests }}"
-  when: synthetics_response.json.tests is defined
+  when: 
+    - pause_monitors_enabled | default(false)
+    - datadog_api_key is defined
+    - datadog_app_key is defined
+    - synthetics_response is defined
+    - synthetics_response.json is defined
+    - synthetics_response.json.tests is defined
+    - not ansible_check_mode
   delegate_to: localhost

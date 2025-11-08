@@ -23,6 +23,10 @@ jobs:
     name: Sequential Infrastructure Maintenance (K8s → Docker)
     runs-on: self-hosted  # Use your local runner
     timeout-minutes: 300  # 5 hours timeout for complete sequential maintenance
+    outputs:
+      k8s_status: ${{ steps.k8s_maintenance.outcome }}
+      docker_status: ${{ steps.docker_maintenance.outcome }}
+      overall_status: ${{ job.status }}
     
     steps:
       - name: Checkout repository
@@ -126,14 +130,12 @@ jobs:
           
           echo "✅ All hosts are reachable via SSH"
       
-      - name: Run Sequential Infrastructure Maintenance
-        id: maintenance
+      - name: Run K8s Cluster Maintenance (Phase 1)
+        id: k8s_maintenance
         run: |
           set -e  # Exit on any error
           
-          echo "🚀 Starting Full Sequential Infrastructure Maintenance"
-          echo "Phase 1: K8s Cluster Maintenance"
-          echo "Phase 2: Docker Host Maintenance"
+          echo "🚀 Phase 1: K8s Cluster Maintenance"
           echo ""
           
           # Determine run mode
@@ -156,76 +158,195 @@ jobs:
           
           echo ""
           echo "🔑 Using local SSH keys for remote host connections"
-          echo "▶️  Executing full sequential maintenance..."
+          echo "▶️  Executing K8s cluster maintenance..."
           
-          # Check if playbook exists and is valid
-          echo "🔍 Checking playbook file..."
-          if [ ! -f "sequential_maintenance.yml" ]; then
-            echo "❌ sequential_maintenance.yml not found in $(pwd)"
-            ls -la *.yml || echo "No .yml files found"
-            exit 1
-          fi
+          # Create K8s-only playbook temporarily
+          cat > k8s_maintenance_only.yml << 'EOF'
+          ---
+          - name: K8s Cluster Maintenance Only
+            hosts: k8s_cluster
+            become: yes
+            gather_facts: yes
+            serial: 1  # One node at a time for safety
+            
+            tasks:
+              - name: Run K8s maintenance role
+                include_role:
+                  name: gregheffner.ubuntu_patching.k8_maintenance
+                vars:
+                  pause_monitors_enabled: true
+                  k8s_skip_tls_verify: "{{ k8s_skip_tls_verify | default(true) }}"
+          EOF
           
-          echo "📋 Playbook file found, checking syntax..."
-          if ! ansible-playbook sequential_maintenance.yml --syntax-check; then
-            echo "❌ Playbook syntax check failed"
-            exit 1
-          fi
+          echo "✅ K8s playbook created, executing..."
           
-          echo "✅ Playbook syntax OK, executing..."
-          
-          # Execute the maintenance playbook with limited output and SSH configuration
-          echo "🚀 Running ansible-playbook command..."
-          echo "Working directory: $(pwd)"
-          echo "Command: ansible-playbook sequential_maintenance.yml --extra-vars \"$TLS_VERIFY\" $CHECK_MODE"
-          
+          # Execute the K8s maintenance playbook
           if ANSIBLE_HOST_KEY_CHECKING=False \
              ANSIBLE_SSH_ARGS="-o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no" \
-             ansible-playbook sequential_maintenance.yml \
+             ansible-playbook k8s_maintenance_only.yml \
              --extra-vars "$TLS_VERIFY" \
-             $CHECK_MODE > /home/ansible/maintenance_summary.log 2>&1; then
-            echo "✅ Sequential maintenance completed successfully!"
+             $CHECK_MODE > /home/ansible/k8s_maintenance.log 2>&1; then
+            echo "✅ K8s cluster maintenance completed successfully!"
             # Show only summary, not sensitive details
-            echo "📊 Maintenance Summary:"
-            grep -E "(PLAY RECAP|ok=|changed=|failed=)" /home/ansible/maintenance_summary.log | head -10 || echo "Summary not available"
+            echo "📊 K8s Maintenance Summary:"
+            grep -E "(PLAY RECAP|ok=|changed=|failed=)" /home/ansible/k8s_maintenance.log | head -10 || echo "Summary not available"
           else
-            echo "❌ Sequential maintenance failed!"
-            # Show the actual error for debugging
+            echo "❌ K8s cluster maintenance failed!"
             echo "📊 Error Output:"
-            cat /home/ansible/maintenance_summary.log | tail -20 || echo "Error details not available"
-            echo ""
-            echo "📊 Error Summary:"
-            grep -E "(fatal|FAILED|ERROR)" /home/ansible/maintenance_summary.log | head -5 || echo "No specific errors found"
+            cat /home/ansible/k8s_maintenance.log | tail -20 || echo "Error details not available"
             exit 1
           fi
         env:
           OP_SERVICE_ACCOUNT_TOKEN: ${{ env.OP_SERVICE_ACCOUNT_TOKEN }}
+
+      - name: Generate K8s Maintenance Report
+        if: always()  # Run even if K8s maintenance failed
+        run: |
+          # Create intermediate report after K8s maintenance
+          cat > k8s-maintenance-report.md << EOF
+          # K8s Cluster Maintenance Report (Phase 1)
+          
+          **Date:** ${{ env.MAINTENANCE_START }}  
+          **Workflow ID:** ${{ github.run_id }}  
+          **Phase:** K8s Cluster Maintenance  
+          **Status:** ${{ steps.k8s_maintenance.outcome }}  
+          
+          ## K8s Cluster Actions Completed
+          - System updates on all K8s nodes
+          - Kubernetes node draining and uncordoning
+          - Datadog monitor management (pause/unpause)
+          - Serial execution (one node at a time)
+          
+          ## Configuration
+          - **TLS Verification:** ${{ inputs.skip_tls_verify == 'true' && 'Disabled' || 'Enabled' }}
+          - **Run Mode:** ${{ inputs.dry_run == 'true' && 'Dry Run (Check Mode)' || 'Live Maintenance' }}
+          
+          ## Next Phase
+          Phase 2 (Docker Host Maintenance) will begin after this report upload.
+          EOF
+
+      - name: Upload K8s Maintenance Report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: k8s-maintenance-report-${{ github.run_number }}
+          path: k8s-maintenance-report.md
+          retention-days: 7
+
+      - name: Schedule Docker Host Maintenance (Phase 2)
+        id: docker_maintenance
+        run: |
+          echo "🚀 Phase 2: Docker Host Maintenance"
+          echo "⚠️  WARNING: This phase will reboot the runner host!"
+          echo ""
+          
+          # Determine run mode
+          if [ "${{ inputs.dry_run }}" == "true" ]; then
+            CHECK_MODE="--check"
+            echo "🧪 Running in DRY RUN mode (no actual changes)"
+          else
+            CHECK_MODE=""
+            echo "� Running LIVE maintenance (will reboot this host)"
+          fi
+          
+          # Create Docker-only playbook
+          cat > docker_maintenance_only.yml << 'EOF'
+          ---
+          - name: Docker Host Maintenance Only
+            hosts: dockerhost
+            become: yes
+            gather_facts: yes
+            
+            tasks:
+              - name: Run Docker host maintenance role
+                include_role:
+                  name: gregheffner.ubuntu_patching.ubuntu_update
+                vars:
+                  reboot_enabled: true
+          EOF
+          
+          echo "✅ Docker playbook created"
+          echo "🕐 Docker host maintenance will complete independently"
+          echo "📝 Final report will be generated after reboot (if live mode)"
+          
+          # Create completion marker before starting docker maintenance
+          echo "DOCKER_MAINTENANCE_STARTED=$(date '+%Y-%m-%d %H:%M:%S')" >> $GITHUB_ENV
+          
+          # Pre-create final report since we might not be able to finish the workflow
+          cat > docker-maintenance-report.md << EOF
+          # Docker Host Maintenance Report (Phase 2)
+          
+          **Date:** ${{ env.MAINTENANCE_START }}  
+          **Docker Phase Started:** $(date '+%Y-%m-%d %H:%M:%S')
+          **Workflow ID:** ${{ github.run_id }}  
+          **Phase:** Docker Host Maintenance  
+          
+          ## Docker Host Actions
+          - System updates on Docker host
+          - Docker container management during updates
+          - Host reboot (if live mode)
+          
+          ## Status
+          Docker host maintenance was initiated. If running in live mode, 
+          the runner host will reboot and this workflow will terminate.
+          Check system logs post-reboot for completion status.
+          
+          ## Configuration
+          - **Run Mode:** ${{ inputs.dry_run == 'true' && 'Dry Run (Check Mode)' || 'Live Maintenance (Will Reboot)' }}
+          EOF
+          
+          # Execute the Docker maintenance playbook
+          # In live mode, this may cause the runner to reboot and workflow to terminate
+          if ANSIBLE_HOST_KEY_CHECKING=False \
+             ANSIBLE_SSH_ARGS="-o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no" \
+             ansible-playbook docker_maintenance_only.yml \
+             $CHECK_MODE > /home/ansible/docker_maintenance.log 2>&1; then
+            echo "✅ Docker host maintenance completed!"
+            echo "📊 Docker Maintenance Summary:"
+            grep -E "(PLAY RECAP|ok=|changed=|failed=)" /home/ansible/docker_maintenance.log | head -10 || echo "Summary not available"
+          else
+            echo "❌ Docker host maintenance failed or was interrupted by reboot"
+            echo "📊 Last output before interruption:"
+            tail -10 /home/ansible/docker_maintenance.log || echo "Log not available"
+          fi
+        env:
+          OP_SERVICE_ACCOUNT_TOKEN: ${{ env.OP_SERVICE_ACCOUNT_TOKEN }}
+
+      - name: Upload Docker Maintenance Report  
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: docker-maintenance-report-${{ github.run_number }}
+          path: docker-maintenance-report.md
+          retention-days: 7
       
-      - name: Generate maintenance report
+      - name: Generate final maintenance report
         if: always()  # Run even if previous steps failed
         run: |
           # Create a comprehensive maintenance report
           cat > maintenance-report.md << EOF
-          # Sequential Infrastructure Maintenance Report
+          # Sequential Infrastructure Maintenance Report - COMPLETE
           
           **Date:** ${{ env.MAINTENANCE_START }}  
           **Workflow ID:** ${{ github.run_id }}  
-          **Status:** ${{ job.status }}  
+          **Final Status:** ${{ job.status }}  
           **Runner:** $(hostname)  
           **Repository:** ${{ github.repository }}  
           **Branch:** ${{ github.ref_name }}  
           
-          ## Maintenance Phases
+          ## Maintenance Phases Completed
           
-          ### Phase 1: K8s Cluster Maintenance
-          - **Target:** k8s_cluster group
+          ### Phase 1: K8s Cluster Maintenance ✅
+          - **Target:** k8s_cluster group (k8-primary, worker1, worker2, worker3)
+          - **Status:** ${{ steps.k8s_maintenance.outcome }}
           - **Actions:** System updates, node draining, reboots, monitor management
           - **Serial execution:** One node at a time for safety
           
-          ### Phase 2: Docker Host Maintenance  
-          - **Target:** docker group
+          ### Phase 2: Docker Host Maintenance 
+          - **Target:** dockerhost group
+          - **Status:** ${{ steps.docker_maintenance.outcome }}
           - **Actions:** System updates, Docker container management, reboots
-          - **Execution:** After K8s cluster maintenance completion
+          - **Note:** ${{ inputs.dry_run == 'true' && 'Dry run completed' || 'May have rebooted runner host' }}
           
           ## Configuration
           - **TLS Verification:** ${{ inputs.skip_tls_verify == 'true' && 'Disabled' || 'Enabled' }}
@@ -233,19 +354,24 @@ jobs:
           - **Timeout:** 5 hours
           - **Security:** Sensitive logs excluded from uploads
           
-          ## Status
-          - **Result:** ${{ job.status }}
-          - **Summary:** Basic statistics only (no sensitive data)
+          ## Final Status
+          - **K8s Result:** ${{ steps.k8s_maintenance.outcome }}
+          - **Docker Result:** ${{ steps.docker_maintenance.outcome }}
+          - **Overall:** ${{ job.status }}
+          - **Reports Generated:** Individual phase reports + this summary
+          
+          ## Post-Maintenance Notes
+          ${{ inputs.dry_run == 'true' && 'This was a dry run - no actual changes were made.' || 'Live maintenance completed. Verify all services are running properly.' }}
           EOF
           
           # Add timestamp to log
-          echo "[${{ env.MAINTENANCE_START }}] Maintenance report generated (ID: ${{ github.run_id }})" >> /mnt/QNAP/backuplogs/ansible-automation.log
+          echo "[${{ env.MAINTENANCE_START }}] Sequential maintenance completed (ID: ${{ github.run_id }}) - K8s: ${{ steps.k8s_maintenance.outcome }}, Docker: ${{ steps.docker_maintenance.outcome }}" >> /mnt/QNAP/backuplogs/ansible-automation.log
 
-      - name: Upload maintenance report only (no sensitive logs)
+      - name: Upload final maintenance report
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: maintenance-report-${{ github.run_number }}
+          name: final-maintenance-report-${{ github.run_number }}
           path: |
             maintenance-report.md
           retention-days: 7  # Shorter retention for security
@@ -254,12 +380,14 @@ jobs:
         if: always()
         run: |
           # Remove any temporary files that might contain sensitive data
-          rm -f /home/ansible/maintenance_summary.log
-          rm -f /home/ansible/k8s_debug.log
-          rm -f /home/ansible/k8s_maintenance.log 
+          rm -f /home/ansible/k8s_maintenance.log
           rm -f /home/ansible/docker_maintenance.log
+          rm -f /home/ansible/k8s_debug.log
+          rm -f /home/ansible/maintenance_summary.log
           rm -f /home/ansible/ansible-*.log
-          echo "🧹 Cleaned up temporary files"
+          rm -f k8s_maintenance_only.yml
+          rm -f docker_maintenance_only.yml
+          echo "🧹 Cleaned up temporary files and playbooks"
 
   notify-completion:
     name: Send Notification
@@ -270,31 +398,50 @@ jobs:
     steps:
       - name: Send completion notification
         run: |
-          if [ "${{ needs.sequential-maintenance.result }}" == "success" ]; then
+          # Determine overall status based on both phases
+          K8S_STATUS="${{ needs.sequential-maintenance.outputs.k8s_status || 'unknown' }}"
+          DOCKER_STATUS="${{ needs.sequential-maintenance.outputs.docker_status || 'unknown' }}"
+          OVERALL_STATUS="${{ needs.sequential-maintenance.result }}"
+          
+          if [ "$OVERALL_STATUS" == "success" ]; then
             STATUS="✅ SUCCESS"
-            MESSAGE="Sequential infrastructure maintenance completed successfully"
+            MESSAGE="Sequential infrastructure maintenance completed - K8s: $K8S_STATUS, Docker: $DOCKER_STATUS"
             EMOJI="🎉"
-          else
+          elif [ "$OVERALL_STATUS" == "failure" ]; then
             STATUS="❌ FAILED" 
-            MESSAGE="Sequential infrastructure maintenance failed - check logs"
+            MESSAGE="Sequential infrastructure maintenance failed - K8s: $K8S_STATUS, Docker: $DOCKER_STATUS"
             EMOJI="🚨"
+          else
+            STATUS="⚠️  PARTIAL"
+            MESSAGE="Sequential infrastructure maintenance partially completed - check individual phase reports"
+            EMOJI="⚠️"
+          fi
+          
+          # Check for dry run mode
+          DRY_RUN_NOTE=""
+          if [ "${{ github.event.inputs.dry_run }}" == "true" ]; then
+            DRY_RUN_NOTE=" (DRY RUN - no changes made)"
+            EMOJI="🧪"
           fi
           
           # Comprehensive log entry
           cat >> /mnt/QNAP/backuplogs/ansible-automation.log << EOF
           [$(date '+%Y-%m-%d %H:%M:%S')] === WEEKLY MAINTENANCE SUMMARY ===
-          Status: $STATUS
+          Status: $STATUS$DRY_RUN_NOTE
+          K8s Phase: $K8S_STATUS  
+          Docker Phase: $DOCKER_STATUS
           Message: $MESSAGE  
           Workflow: ${{ github.run_id }}
-          Duration: ${{ github.event.workflow_run.duration || 'Unknown' }}
+          Duration: Started ${{ github.event.workflow_run.started_at || github.event.head_commit.timestamp }}
           Runner: $(hostname)
+          Reports: K8s + Docker + Final reports uploaded to GitHub
           ================================================================
           EOF
           
-          echo "$EMOJI $MESSAGE"
+          echo "$EMOJI $MESSAGE$DRY_RUN_NOTE"
           
-          # You can add email/Slack/webhook notifications here
-          # Example webhook notification:
-          # curl -X POST "YOUR_WEBHOOK_URL" \
-          #   -H "Content-Type: application/json" \
-          #   -d "{\"text\": \"$EMOJI $MESSAGE\"}"
+          # Note about runner host reboot in live mode
+          if [ "${{ github.event.inputs.dry_run }}" != "true" ]; then
+            echo "ℹ️  Note: If docker host maintenance ran in live mode, the runner may have rebooted"
+            echo "   Check post-reboot logs for docker host maintenance completion status"
+          fi

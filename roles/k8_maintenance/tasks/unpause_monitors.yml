@@ -7,6 +7,9 @@
   delegate_to: localhost
   environment:
     OP_SERVICE_ACCOUNT_TOKEN: "{{ lookup('env', 'OP_SERVICE_ACCOUNT_TOKEN') }}"
+  when:
+    - pause_monitors_enabled | default(false)
+    - not ansible_check_mode
 
 - name: Get Datadog Application key from 1Password
   shell: /home/linuxbrew/.linuxbrew/bin/op read "op://Secure APIs/vault_dd_app_key/password"
@@ -15,6 +18,9 @@
   delegate_to: localhost
   environment:
     OP_SERVICE_ACCOUNT_TOKEN: "{{ lookup('env', 'OP_SERVICE_ACCOUNT_TOKEN') }}"
+  when:
+    - pause_monitors_enabled | default(false)
+    - not ansible_check_mode
 
 - name: Set API key variables
   set_fact:
@@ -22,13 +28,11 @@
     datadog_app_key: "{{ dd_app_key_result.stdout }}"
   no_log: true
   delegate_to: localhost
-
-- name: Set API key variables
-  set_fact:
-    datadog_api_key: "{{ dd_api_key_result.stdout }}"
-    datadog_app_key: "{{ dd_app_key_result.stdout }}"
-  no_log: true
-  delegate_to: localhost
+  when:
+    - pause_monitors_enabled | default(false)
+    - dd_api_key_result is defined
+    - dd_app_key_result is defined
+    - not ansible_check_mode
 
 - name: Get all monitors
   uri:
@@ -41,11 +45,21 @@
     status_code: 200
   register: monitors_response
   delegate_to: localhost
+  when:
+    - pause_monitors_enabled | default(false)
+    - datadog_api_key is defined
+    - datadog_app_key is defined
+    - not ansible_check_mode
 
 - name: Display number of monitors found
   debug:
     msg: "Found {{ monitors_response.json | length }} monitors to check for unmuting"
   delegate_to: localhost
+  when:
+    - pause_monitors_enabled | default(false)
+    - monitors_response is defined
+    - monitors_response.json is defined
+    - not ansible_check_mode
 
 - name: Unmute each monitor
   uri:
@@ -57,7 +71,13 @@
       Content-Type: "application/json"
     status_code: 200
   loop: "{{ monitors_response.json }}"
-  when: monitors_response.json is defined
+  when: 
+    - pause_monitors_enabled | default(false)
+    - datadog_api_key is defined
+    - datadog_app_key is defined
+    - monitors_response is defined
+    - monitors_response.json is defined
+    - not ansible_check_mode
   delegate_to: localhost
 
 - name: Get all synthetic tests
@@ -71,11 +91,22 @@
     status_code: 200
   register: synthetics_response
   delegate_to: localhost
+  when:
+    - pause_monitors_enabled | default(false)
+    - datadog_api_key is defined
+    - datadog_app_key is defined
+    - not ansible_check_mode
 
 - name: Display number of synthetic tests found
   debug:
     msg: "Found {{ synthetics_response.json.tests | length }} synthetic tests to unpause"
   delegate_to: localhost
+  when:
+    - pause_monitors_enabled | default(false)
+    - synthetics_response is defined
+    - synthetics_response.json is defined
+    - synthetics_response.json.tests is defined
+    - not ansible_check_mode
 
 - name: Unpause each synthetic test
   uri:
@@ -90,5 +121,13 @@
       new_status: "live"
     status_code: 200
   loop: "{{ synthetics_response.json.tests }}"
-  when: synthetics_response.json.tests is defined and item.status == "paused"
+  when: 
+    - pause_monitors_enabled | default(false)
+    - datadog_api_key is defined
+    - datadog_app_key is defined
+    - synthetics_response is defined
+    - synthetics_response.json is defined
+    - synthetics_response.json.tests is defined
+    - item.status == "paused"
+    - not ansible_check_mode
   delegate_to: localhost
