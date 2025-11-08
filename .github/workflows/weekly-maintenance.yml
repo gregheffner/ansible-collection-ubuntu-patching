@@ -70,8 +70,17 @@ jobs:
       
       - name: Install/Update Ansible Collection
         run: |
-          # Install the latest version of the collection
-          ansible-galaxy collection install gregheffner.ubuntu_patching --force
+          # Build and install the local collection
+          ansible-galaxy collection build --force
+          
+          # Install from local tarball to ensure we use the current code
+          COLLECTION_FILE=$(ls gregheffner-ubuntu_patching-*.tar.gz | sort -V | tail -n 1)
+          echo "Installing collection: $COLLECTION_FILE"
+          ansible-galaxy collection install "$COLLECTION_FILE" --force
+          
+          # Also install from Galaxy as backup
+          ansible-galaxy collection install gregheffner.ubuntu_patching --force || echo "Galaxy install failed, using local"
+          
           echo "✅ Collection installed/updated successfully"
       
       - name: Verify inventory and connectivity
@@ -157,9 +166,12 @@ jobs:
             grep -E "(PLAY RECAP|ok=|changed=|failed=)" /home/ansible/maintenance_summary.log | head -10 || echo "Summary not available"
           else
             echo "❌ Sequential maintenance failed!"
-            # Show only error indicators, not sensitive details
+            # Show the actual error for debugging
+            echo "📊 Error Output:"
+            cat /home/ansible/maintenance_summary.log | tail -20 || echo "Error details not available"
+            echo ""
             echo "📊 Error Summary:"
-            grep -E "(fatal|FAILED|ERROR)" /home/ansible/maintenance_summary.log | head -5 || echo "Error details logged locally"
+            grep -E "(fatal|FAILED|ERROR)" /home/ansible/maintenance_summary.log | head -5 || echo "No specific errors found"
             exit 1
           fi
         env:
