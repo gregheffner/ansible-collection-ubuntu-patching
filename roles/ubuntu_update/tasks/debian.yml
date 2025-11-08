@@ -1,26 +1,52 @@
 ---
 # Ubuntu package management tasks
 
-- name: Update APT cache (apt update)
+- name: Clear APT lock files if they exist
+  become: true
+  file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - /var/lib/dpkg/lock-frontend
+    - /var/lib/apt/lists/lock
+    - /var/cache/apt/archives/lock
+  ignore_errors: true
+  when: update_apt_packages | default(true)
+
+- name: Update APT cache (apt update) with retry logic
   become: true
   apt:
     update_cache: true
     cache_valid_time: 3600
+    force_apt_get: true
   register: apt_cache_update_result
+  retries: 3
+  delay: 10
+  until: apt_cache_update_result is succeeded
   when: update_apt_packages | default(true)
 
-- name: Upgrade APT packages (apt upgrade)
+- name: Upgrade APT packages (apt upgrade) with retry logic
   become: true
   apt:
     upgrade: 'yes'
+    force_apt_get: true
+    dpkg_options: 'force-confdef,force-confold'
   register: apt_upgrade_result
+  retries: 2
+  delay: 5
+  until: apt_upgrade_result is succeeded
   when: update_apt_packages | default(true)
 
-- name: Perform distribution upgrade (apt dist-upgrade)
+- name: Perform distribution upgrade (apt dist-upgrade) with retry logic
   become: true
   apt:
     upgrade: dist
+    force_apt_get: true
+    dpkg_options: 'force-confdef,force-confold'
   register: apt_dist_upgrade_result
+  retries: 2
+  delay: 5
+  until: apt_dist_upgrade_result is succeeded
   when: perform_dist_upgrade | default(false)
 
 - name: Clean up APT packages

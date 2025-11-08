@@ -32,12 +32,23 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
       
+      - name: Mask sensitive values
+        run: |
+          # Mask common patterns that might contain API keys
+          echo "::add-mask::ops_ey"
+          echo "::add-mask::dd_"
+          echo "::add-mask::api_key"
+          echo "::add-mask::app_key"
+          echo "🔒 Sensitive value patterns masked"
+      
       - name: Set up environment variables
         run: |
           # Set 1Password service account token (no output to avoid logging)
           if [ -f /home/ansible/scripts/op-signin/op_token ]; then
-            echo "OP_SERVICE_ACCOUNT_TOKEN=$(cat /home/ansible/scripts/op-signin/op_token)" >> $GITHUB_ENV
-            echo "✅ 1Password service account token loaded"
+            TOKEN=$(cat /home/ansible/scripts/op-signin/op_token)
+            echo "::add-mask::$TOKEN"
+            echo "OP_SERVICE_ACCOUNT_TOKEN=$TOKEN" >> $GITHUB_ENV
+            echo "✅ 1Password service account token loaded (masked)"
           else
             echo "❌ 1Password token file not found"
             exit 1
@@ -183,6 +194,7 @@ jobs:
           # Execute the K8s maintenance playbook
           if ANSIBLE_HOST_KEY_CHECKING=False \
              ANSIBLE_SSH_ARGS="-o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no" \
+             OP_SERVICE_ACCOUNT_TOKEN="${{ env.OP_SERVICE_ACCOUNT_TOKEN }}" \
              ansible-playbook k8s_maintenance_only.yml \
              --extra-vars "$TLS_VERIFY" \
              $CHECK_MODE > /home/ansible/k8s_maintenance.log 2>&1; then
@@ -196,8 +208,6 @@ jobs:
             cat /home/ansible/k8s_maintenance.log | tail -20 || echo "Error details not available"
             exit 1
           fi
-        env:
-          OP_SERVICE_ACCOUNT_TOKEN: ${{ env.OP_SERVICE_ACCOUNT_TOKEN }}
 
       - name: Generate K8s Maintenance Report
         if: always()  # Run even if K8s maintenance failed
@@ -299,6 +309,7 @@ jobs:
           # In live mode, this may cause the runner to reboot and workflow to terminate
           if ANSIBLE_HOST_KEY_CHECKING=False \
              ANSIBLE_SSH_ARGS="-o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no" \
+             OP_SERVICE_ACCOUNT_TOKEN="${{ env.OP_SERVICE_ACCOUNT_TOKEN }}" \
              ansible-playbook docker_maintenance_only.yml \
              $CHECK_MODE > /home/ansible/docker_maintenance.log 2>&1; then
             echo "✅ Docker host maintenance completed!"
@@ -309,8 +320,6 @@ jobs:
             echo "📊 Last output before interruption:"
             tail -10 /home/ansible/docker_maintenance.log || echo "Log not available"
           fi
-        env:
-          OP_SERVICE_ACCOUNT_TOKEN: ${{ env.OP_SERVICE_ACCOUNT_TOKEN }}
 
       - name: Upload Docker Maintenance Report  
         if: always()
