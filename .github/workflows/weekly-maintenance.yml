@@ -150,24 +150,6 @@ jobs:
         env:
           OP_SERVICE_ACCOUNT_TOKEN: ${{ env.OP_SERVICE_ACCOUNT_TOKEN }}
       
-      - name: Log maintenance completion
-        run: |
-          # Log to your automation log file
-          DRY_RUN_STATUS=""
-          if [ "${{ inputs.dry_run }}" == "true" ]; then
-            DRY_RUN_STATUS=" (DRY RUN)"
-          fi
-          
-          if [ "${{ steps.maintenance.outcome }}" == "success" ]; then
-            STATUS="SUCCESS"
-            MESSAGE="Full sequential infrastructure maintenance completed successfully$DRY_RUN_STATUS"
-          else
-            STATUS="FAILED"
-            MESSAGE="Full sequential infrastructure maintenance failed$DRY_RUN_STATUS"
-          fi
-          
-          echo "[${{ env.MAINTENANCE_START }}] $STATUS: $MESSAGE (Workflow: ${{ env.WORKFLOW_ID }})" >> /mnt/QNAP/backuplogs/ansible-automation.log
-      
       - name: Generate maintenance report
         if: always()  # Run even if previous steps failed
         run: |
