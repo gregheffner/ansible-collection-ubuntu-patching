@@ -70,6 +70,11 @@ jobs:
       
       - name: Install/Update Ansible Collection
         run: |
+          # Show current working directory and files
+          echo "Current directory: $(pwd)"
+          echo "Available files:"
+          ls -la
+          
           # Build and install the local collection
           ansible-galaxy collection build --force
           
@@ -153,7 +158,27 @@ jobs:
           echo "🔑 Using local SSH keys for remote host connections"
           echo "▶️  Executing full sequential maintenance..."
           
+          # Check if playbook exists and is valid
+          echo "🔍 Checking playbook file..."
+          if [ ! -f "sequential_maintenance.yml" ]; then
+            echo "❌ sequential_maintenance.yml not found in $(pwd)"
+            ls -la *.yml || echo "No .yml files found"
+            exit 1
+          fi
+          
+          echo "📋 Playbook file found, checking syntax..."
+          if ! ansible-playbook sequential_maintenance.yml --syntax-check; then
+            echo "❌ Playbook syntax check failed"
+            exit 1
+          fi
+          
+          echo "✅ Playbook syntax OK, executing..."
+          
           # Execute the maintenance playbook with limited output and SSH configuration
+          echo "🚀 Running ansible-playbook command..."
+          echo "Working directory: $(pwd)"
+          echo "Command: ansible-playbook sequential_maintenance.yml --extra-vars \"$TLS_VERIFY\" $CHECK_MODE --one-line"
+          
           if ANSIBLE_HOST_KEY_CHECKING=False \
              ANSIBLE_SSH_ARGS="-o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no" \
              ansible-playbook sequential_maintenance.yml \
