@@ -30,8 +30,14 @@ jobs:
       
       - name: Set up environment variables
         run: |
-          # Set 1Password service account token
-          echo "OP_SERVICE_ACCOUNT_TOKEN=$(cat /home/ansible/scripts/op-signin/op_token)" >> $GITHUB_ENV
+          # Set 1Password service account token (no output to avoid logging)
+          if [ -f /home/ansible/scripts/op-signin/op_token ]; then
+            echo "OP_SERVICE_ACCOUNT_TOKEN=$(cat /home/ansible/scripts/op-signin/op_token)" >> $GITHUB_ENV
+            echo "✅ 1Password service account token loaded"
+          else
+            echo "❌ 1Password token file not found"
+            exit 1
+          fi
           
           # Set maintenance timestamp
           echo "MAINTENANCE_START=$(date '+%Y-%m-%d %H:%M:%S')" >> $GITHUB_ENV
