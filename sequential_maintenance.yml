@@ -1,0 +1,82 @@
+---
+# Sequential Maintenance Playbook - K8s first, then Docker host
+# This ensures K8s maintenance completes before touching the docker host
+
+- name: K8s Cluster Maintenance (Phase 1)
+  hosts: k8s_cluster
+  become: true
+  serial: 1  # Process K8s nodes one at a time
+  gather_facts: true
+  
+  vars:
+    # K8s-specific variables
+    perform_reboot: true
+    update_docker: true
+    pause_monitors_enabled: true
+    pause_duration: 3600  # 1 hour
+    k8_primary_node: "{{ groups['k8s_cluster'][0] if 'k8s_cluster' in groups else inventory_hostname }}"
+    reboot_delay: 30
+    k8s_reboot_timeout: 600
+    node_ready_retries: 30
+    node_ready_delay: 10
+    update_log_path: "/tmp/k8s_maintenance.log"
+
+  pre_tasks:
+    - name: Display K8s maintenance start
+      debug:
+        msg: |
+          === PHASE 1: K8s CLUSTER MAINTENANCE ===
+          Starting maintenance on: {{ inventory_hostname }}
+          Node role: {{ 'Primary' if inventory_hostname == k8_primary_node else 'Worker' }}
+          Time: {{ ansible_date_time.iso8601 }}
+
+  roles:
+    - role: gregheffner.ubuntu_patching.k8_maintenance
+      tags: ['k8s_maintenance', 'kubernetes']
+
+  post_tasks:
+    - name: K8s maintenance completion
+      debug:
+        msg: |
+          K8s maintenance completed on: {{ inventory_hostname }}
+          Phase 1 complete for this node
+          Time: {{ ansible_date_time.iso8601 }}
+
+- name: Docker Host Maintenance (Phase 2) 
+  hosts: docker
+  become: true
+  gather_facts: true
+  
+  vars:
+    # Docker host variables
+    perform_reboot: true
+    update_docker: true
+    pause_monitors_enabled: false  # No K8s monitors on docker host
+    perform_dist_upgrade: false    # Conservative for automation
+    cleanup_packages: true
+    reboot_method: "modern"
+    reboot_timeout: 600
+    connect_timeout: 20
+    update_log_path: "/tmp/docker_maintenance.log"
+
+  pre_tasks:
+    - name: Display docker maintenance start
+      debug:
+        msg: |
+          === PHASE 2: DOCKER HOST MAINTENANCE ===
+          Starting maintenance on: {{ inventory_hostname }}
+          K8s cluster maintenance is now complete
+          Time: {{ ansible_date_time.iso8601 }}
+
+  roles:
+    - role: gregheffner.ubuntu_patching.ubuntu_update
+      tags: ['ubuntu_update', 'system_packages']
+
+  post_tasks:
+    - name: Final completion status
+      debug:
+        msg: |
+          === SEQUENTIAL MAINTENANCE COMPLETE ===
+          Docker host maintenance completed on: {{ inventory_hostname }}
+          All maintenance phases finished successfully
+          Time: {{ ansible_date_time.iso8601 }}

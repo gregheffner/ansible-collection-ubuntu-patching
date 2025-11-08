@@ -25,6 +25,10 @@ wheels/
 *.retry
 .vault_pass
 
+# Galaxy build artifacts
+*.tar.gz
+gregheffner-ubuntu_patching-*.tar.gz
+
 # IDE
 .vscode/
 .idea/

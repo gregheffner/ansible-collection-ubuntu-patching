@@ -1,19 +1,19 @@
-# Ansible Collection - Smart All-Roles System Maintenance
+# Ansible Collection - Sequential Infrastructure Maintenance
 
-This Ansible collection provides intelligent, comprehensive system maintenance using smart conditional role targeting. Execute all roles together with automatic host group detection for complete infrastructure maintenance.
+This Ansible collection provides **sequential, phased infrastructure maintenance** designed for production environments where order of operations is critical. The collection ensures K8s cluster maintenance completes entirely before touching your control nodes, preventing connection loss and ensuring reliable automation.
 
 ## Overview
 
-The `gregheffner.ubuntu_patching` collection features Smart Conditional Targeting that automatically runs the appropriate roles based on host group membership. This approach is designed for complete infrastructure maintenance with a single playbook execution.
+The `gregheffner.ubuntu_patching` collection features **Sequential Maintenance Execution** with smart conditional role targeting. This approach is designed for complete infrastructure maintenance with proper phase separation and safety controls.
 
 ### Key Features
 
+- **Sequential Phase Execution**: K8s maintenance completes before docker host maintenance begins  
+- **Production Safety**: Prevents control node interruption during K8s operations
 - **Smart Conditional Targeting**: Automatically runs appropriate roles on correct host groups
 - **Complete System Maintenance**: K8s cluster maintenance and Ubuntu system updates
-- **Safety-First Design**: K8s maintenance runs first, serial execution prevents issues
 - **Docker Integration**: Automatic container management and restarts
 - **Datadog Integration**: Monitor pausing and unpausing during maintenance
-- **Single Playbook**: Manage entire infrastructure with one command
 
 ## Quick Start
 
@@ -21,11 +21,66 @@ The `gregheffner.ubuntu_patching` collection features Smart Conditional Targetin
 # Install the collection
 ansible-galaxy collection install gregheffner.ubuntu_patching
 
-# Run smart all-roles maintenance on your entire infrastructure
-ansible-playbook -i inventory.ini smart_all_roles.yml
+# Download the sequential maintenance playbook
+wget https://raw.githubusercontent.com/gregheffner/ansible-collection-ubuntu-patching/main/sequential_maintenance.yml
 
-# Target specific groups (monthly docker updates, K8s maintenance, etc.)
-ansible-playbook -i inventory.ini smart_all_roles.yml --limit docker
+# Run complete sequential maintenance (K8s first, then docker host)
+ansible-playbook sequential_maintenance.yml
+```
+
+## Sequential Maintenance (Recommended)
+
+The **sequential maintenance approach** ensures your infrastructure is updated in the safest possible order. This prevents control node interruption and guarantees K8s operations complete successfully.
+
+### Primary Playbook: `sequential_maintenance.yml`
+
+```bash
+# Complete infrastructure maintenance in proper sequence
+ansible-playbook sequential_maintenance.yml
+```
+
+**Execution Order:**
+1. **Phase 1**: Complete ALL K8s cluster maintenance (k8-primary, worker1, worker2, worker3)
+2. **Phase 2**: Docker host maintenance (dockerhost) - only after K8s is 100% complete
+
+**Benefits:**
+- **Production Safe**: Control node not touched until K8s operations complete
+- **Zero Connection Loss**: No risk of losing ansible connectivity during K8s maintenance  
+- **Clear Phase Separation**: Obvious success/failure points for each infrastructure component
+- **Comprehensive Logging**: Phase-specific logs for troubleshooting
+
+### Breaking Out Maintenance When Needed
+
+Sometimes you need to run phases individually for troubleshooting, testing, or scheduling:
+
+#### K8s Cluster Only
+```bash
+# Only run K8s maintenance (skip docker host)
+ansible-playbook smart_all_roles.yml --limit k8s_cluster
+```
+
+#### Docker Host Only  
+```bash
+# Only run docker host maintenance (skip K8s cluster)
+ansible-playbook smart_all_roles.yml --limit docker
+```
+
+#### Individual K8s Nodes
+```bash
+# Test on single K8s node first
+ansible-playbook smart_all_roles.yml --limit k8-primary
+
+# Run on specific worker nodes
+ansible-playbook smart_all_roles.yml --limit worker1,worker2
+```
+
+#### Role-Specific Execution
+```bash
+# Only K8s maintenance tasks (no Ubuntu updates)
+ansible-playbook smart_all_roles.yml --tags k8s_maintenance
+
+# Only Ubuntu system updates (no K8s maintenance)
+ansible-playbook smart_all_roles.yml --tags ubuntu_update
 ```
 
 ## How Smart Targeting Works
@@ -236,22 +291,34 @@ restart_docker_containers=true
 
 ## Real-World Usage Examples
 
-### Complete Infrastructure Maintenance
+### 1. Complete Sequential Infrastructure Maintenance (Recommended)
+
 ```bash
-# Smart targeting runs appropriate roles automatically across all hosts
-ansible-playbook -i inventory.ini smart_all_roles.yml
+# Full production maintenance - K8s cluster first, then docker host
+ansible-playbook sequential_maintenance.yml
 ```
 
-### Monthly Docker Host Updates  
+This is the **primary recommended approach** for production environments.
+
+### 2. Phase-Specific Maintenance
+
+**K8s Cluster Maintenance Only:**
 ```bash
-# Target just your localhost docker environment for monthly maintenance
-ansible-playbook -i inventory.ini smart_all_roles.yml --limit docker
+# Emergency K8s patches or when docker host doesn't need updates
+ansible-playbook smart_all_roles.yml --limit k8s_cluster
 ```
 
-### Quick Testing & Validation
+**Docker Host Maintenance Only:**
 ```bash
-# Dry run to see what would happen without making changes
-ansible-playbook -i inventory.ini smart_all_roles.yml --check --diff
+# Monthly localhost maintenance, K8s cluster already up-to-date
+ansible-playbook smart_all_roles.yml --limit docker
+```
+
+### 3. Testing and Validation
+
+```bash
+# Dry run to see what would happen across all infrastructure
+ansible-playbook sequential_maintenance.yml --check --diff
 
 # Test on just the docker host first
 ansible-playbook -i inventory.ini smart_all_roles.yml --limit docker
@@ -508,19 +575,30 @@ echo "Time: $(date)"
 
 ## Summary
 
-**Smart Conditional All-Roles Collection** provides:
+**Sequential Infrastructure Maintenance Collection** provides:
 
-- 🧠 **Intelligent Targeting**: Automatically runs the right roles on the right hosts
-- 🔒 **Production Safe**: Serial execution, conservative defaults, safety checks
+- **Sequential Phase Execution**: K8s cluster maintenance completes before docker host updates
+- **Production Safety**: Control nodes never interrupted during K8s operations  
+- **Intelligent Targeting**: Automatically runs the right roles on the right hosts
 - **Zero-Downtime K8s**: Proper node draining and health validation
 - **Docker Integration**: Container lifecycle management and restarts  
-- 📊 **Monitoring Integration**: Datadog monitor management during maintenance
-- **Complete Automation**: Single playbook manages entire infrastructure
-- **Flexible Execution**: Tag-based filtering, group targeting, variable overrides
+- **Monitoring Integration**: Datadog monitor management during maintenance
+- **Complete Automation**: Single playbook manages entire infrastructure with proper sequencing
+- **Flexible Execution**: Break out phases when needed, tag-based filtering, group targeting
 
 ### Perfect for:
-- **Monthly infrastructure maintenance** across mixed environments
+
+- **Production infrastructure maintenance** requiring safe execution order
+- **Monthly infrastructure maintenance** across mixed K8s and standalone environments
 - **Kubernetes cluster patching** with zero downtime
+- **Docker host updates** (perfect for localhost environments)
+- **Automated maintenance windows** with comprehensive logging
+- **Production environments** requiring safety and reliability
+
+### Key Playbooks:
+
+- **`sequential_maintenance.yml`** - Primary recommended playbook (K8s first, then docker)
+- **`smart_all_roles.yml`** - Smart conditional targeting (use with --limit for individual phases)
 - **Docker host updates** (perfect for localhost environments)
 - **Automated maintenance windows** with comprehensive logging
 - **Production environments** requiring safety and reliability
