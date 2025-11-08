@@ -20,7 +20,7 @@ on:
 
 jobs:
   sequential-maintenance:
-    name: Sequential Infrastructure Maintenance (K8s → Docker)
+    name: Sequential Infrastructure Maintenance
     runs-on: self-hosted  # Use your local runner
     timeout-minutes: 300  # 5 hours timeout for complete sequential maintenance
     outputs:
@@ -39,7 +39,7 @@ jobs:
           echo "::add-mask::dd_"
           echo "::add-mask::api_key"
           echo "::add-mask::app_key"
-          echo "🔒 Sensitive value patterns masked"
+          echo "Sensitive value patterns masked"
       
       - name: Set up environment variables
         run: |
@@ -48,9 +48,9 @@ jobs:
             TOKEN=$(cat /home/ansible/scripts/op-signin/op_token)
             echo "::add-mask::$TOKEN"
             echo "OP_SERVICE_ACCOUNT_TOKEN=$TOKEN" >> $GITHUB_ENV
-            echo "✅ 1Password service account token loaded (masked)"
+            echo "1Password service account token loaded (masked)"
           else
-            echo "❌ 1Password token file not found"
+            echo "1Password token file not found"
             exit 1
           fi
           
@@ -60,7 +60,7 @@ jobs:
           
           # Ensure SSH agent is available and keys are loaded
           echo "SSH_AUTH_SOCK=$SSH_AUTH_SOCK" >> $GITHUB_ENV
-          echo "🔑 SSH agent status:"
+          echo "SSH agent status:"
           ssh-add -l || echo "No SSH keys loaded, will use default SSH configuration"
       
       - name: Load SSH keys for remote connections
@@ -73,56 +73,42 @@ jobs:
           fi
           
           # Add all available SSH keys
-          echo "🔑 Loading SSH keys for remote host connections..."
-          ssh-add ~/.ssh/id_* 2>/dev/null || echo "Using default SSH key configuration"
-          
-          # Verify SSH keys are available
-          echo "📋 Available SSH keys:"
-          ssh-add -l || echo "Will use SSH config and default keys"
-          
-          # Test SSH config is working
-          echo "🔧 SSH configuration ready for remote host connections"
+          ssh-add ~/.ssh/id_* 2>/dev/null || echo "Using default SSH configuration"
+          echo "SSH keys loaded for remote connections"
       
       - name: Install/Update Ansible Collection
         run: |
-          # Show current working directory and files
-          echo "Current directory: $(pwd)"
-          echo "Available files:"
-          ls -la
-          
           # Build and install the local collection
           ansible-galaxy collection build --force
           
           # Install from local tarball to ensure we use the current code
           COLLECTION_FILE=$(ls gregheffner-ubuntu_patching-*.tar.gz | sort -V | tail -n 1)
-          echo "Installing collection: $COLLECTION_FILE"
           ansible-galaxy collection install "$COLLECTION_FILE" --force
           
-          # Also install from Galaxy as backup
-          ansible-galaxy collection install gregheffner.ubuntu_patching --force || echo "Galaxy install failed, using local"
-          
-          echo "✅ Collection installed/updated successfully"
+          echo "Collection installed successfully"
       
-      - name: Verify inventory and connectivity
+      - name: Verify connectivity
         run: |
-          echo "🔍 Testing connectivity to all hosts using local SSH keys..."
-          echo "Current user: $(whoami)"
-          echo "Current directory: $(pwd)"
-          echo "SSH config directory: $(ls -la ~/.ssh/ || echo 'No .ssh directory')"
-          
-          # Test direct SSH first (using IP from inventory)
-          echo "Testing direct SSH to k8-primary (192.168.1.190):"
-          ssh -o ConnectTimeout=5 -o StrictHostKeyChecking=no 192.168.1.190 "echo 'Direct SSH works'" || echo "Direct SSH failed"
-          
           # Test K8s cluster connectivity 
-          echo "Testing K8s cluster hosts with ansible:"
-          ansible k8s_cluster -m ping --one-line > /home/ansible/k8s_debug.log 2>&1
-          if [ $? -eq 0 ]; then
-            echo "✅ K8s cluster hosts reachable"
-            echo "📊 Connection Summary:"
+          if ansible k8s_cluster -m ping --one-line > /dev/null 2>&1; then
+            echo "K8s cluster hosts reachable"
+          else
+            echo "K8s cluster connectivity failed"
+            exit 1
+          fi
+          
+          # Test Docker host connectivity
+          if ansible dockerhost -m ping --one-line > /dev/null 2>&1; then
+            echo "Docker host reachable"
+          else
+            echo "Docker host connectivity failed"
+            exit 1
+          fi
+            echo "K8s cluster hosts reachable"
+            echo "Connection Summary:"
             grep "SUCCESS" /home/ansible/k8s_debug.log || echo "All hosts responded"
           else
-            echo "❌ K8s cluster connectivity failed"
+            echo "K8s cluster connectivity failed"
             echo "Debug output:"
             cat /home/ansible/k8s_debug.log | head -20 || echo "Debug log not available"
             exit 1
@@ -133,43 +119,36 @@ jobs:
           if ANSIBLE_HOST_KEY_CHECKING=False \
              ANSIBLE_SSH_ARGS="-o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no" \
              ansible dockerhost -m ping --one-line > /dev/null 2>&1; then
-            echo "✅ Docker hosts reachable"
+            echo "Docker hosts reachable"
           else
-            echo "❌ Docker host connectivity failed"
+            echo "Docker host connectivity failed"
             exit 1
           fi
           
-          echo "✅ All hosts are reachable via SSH"
+          echo "All hosts reachable"
       
       - name: Run K8s Cluster Maintenance (Phase 1)
         id: k8s_maintenance
         run: |
           set -e  # Exit on any error
           
-          echo "🚀 Phase 1: K8s Cluster Maintenance"
-          echo ""
+          echo "Phase 1: K8s Cluster Maintenance"
           
           # Determine run mode
           if [ "${{ inputs.dry_run }}" == "true" ]; then
             CHECK_MODE="--check"
-            echo "🧪 Running in DRY RUN mode (no actual changes)"
+            echo "Running in DRY RUN mode"
           else
             CHECK_MODE=""
-            echo "🔧 Running LIVE maintenance (making actual changes)"
+            echo "Running LIVE maintenance"
           fi
           
           # Set TLS verification for K8s
           if [ "${{ inputs.skip_tls_verify }}" == "true" ]; then
             TLS_VERIFY="k8s_skip_tls_verify=true"
-            echo "⚠️  Skipping TLS verification for K8s API"
           else
             TLS_VERIFY="k8s_skip_tls_verify=false"
-            echo "🔒 Using TLS verification for K8s API"
           fi
-          
-          echo ""
-          echo "🔑 Using local SSH keys for remote host connections"
-          echo "▶️  Executing K8s cluster maintenance..."
           
           # Create K8s-only playbook temporarily
           cat > k8s_maintenance_only.yml << 'EOF'
@@ -189,7 +168,7 @@ jobs:
                   k8s_skip_tls_verify: "{{ k8s_skip_tls_verify | default(true) }}"
           EOF
           
-          echo "✅ K8s playbook created, executing..."
+          echo "K8s playbook created, executing..."
           
           # Execute the K8s maintenance playbook
           if ANSIBLE_HOST_KEY_CHECKING=False \
@@ -198,14 +177,9 @@ jobs:
              ansible-playbook k8s_maintenance_only.yml \
              --extra-vars "$TLS_VERIFY" \
              $CHECK_MODE > /home/ansible/k8s_maintenance.log 2>&1; then
-            echo "✅ K8s cluster maintenance completed successfully!"
-            # Show only summary, not sensitive details
-            echo "📊 K8s Maintenance Summary:"
-            grep -E "(PLAY RECAP|ok=|changed=|failed=)" /home/ansible/k8s_maintenance.log | head -10 || echo "Summary not available"
+            echo "K8s cluster maintenance completed successfully!"
           else
-            echo "❌ K8s cluster maintenance failed!"
-            echo "📊 Error Output:"
-            cat /home/ansible/k8s_maintenance.log | tail -20 || echo "Error details not available"
+            echo "K8s cluster maintenance failed!"
             exit 1
           fi
 
@@ -246,17 +220,15 @@ jobs:
       - name: Schedule Docker Host Maintenance (Phase 2)
         id: docker_maintenance
         run: |
-          echo "🚀 Phase 2: Docker Host Maintenance"
-          echo "⚠️  WARNING: This phase will reboot the runner host!"
-          echo ""
+          echo "Phase 2: Docker Host Maintenance"
           
           # Determine run mode
           if [ "${{ inputs.dry_run }}" == "true" ]; then
             CHECK_MODE="--check"
-            echo "🧪 Running in DRY RUN mode (no actual changes)"
+            echo "Running in DRY RUN mode"
           else
             CHECK_MODE=""
-            echo "� Running LIVE maintenance (will reboot this host)"
+            echo "Running LIVE maintenance (will reboot host)"
           fi
           
           # Create Docker-only playbook
@@ -275,9 +247,9 @@ jobs:
                   reboot_enabled: true
           EOF
           
-          echo "✅ Docker playbook created"
-          echo "🕐 Docker host maintenance will complete independently"
-          echo "📝 Final report will be generated after reboot (if live mode)"
+          echo "Docker playbook created"
+          echo "Docker host maintenance will complete independently"
+          echo "Final report will be generated after reboot (if live mode)"
           
           # Create completion marker before starting docker maintenance
           echo "DOCKER_MAINTENANCE_STARTED=$(date '+%Y-%m-%d %H:%M:%S')" >> $GITHUB_ENV
@@ -312,13 +284,9 @@ jobs:
              OP_SERVICE_ACCOUNT_TOKEN="${{ env.OP_SERVICE_ACCOUNT_TOKEN }}" \
              ansible-playbook docker_maintenance_only.yml \
              $CHECK_MODE > /home/ansible/docker_maintenance.log 2>&1; then
-            echo "✅ Docker host maintenance completed!"
-            echo "📊 Docker Maintenance Summary:"
-            grep -E "(PLAY RECAP|ok=|changed=|failed=)" /home/ansible/docker_maintenance.log | head -10 || echo "Summary not available"
+            echo "Docker host maintenance completed!"
           else
-            echo "❌ Docker host maintenance failed or was interrupted by reboot"
-            echo "📊 Last output before interruption:"
-            tail -10 /home/ansible/docker_maintenance.log || echo "Log not available"
+            echo "Docker host maintenance failed or was interrupted by reboot"
           fi
 
       - name: Upload Docker Maintenance Report  
@@ -391,12 +359,10 @@ jobs:
           # Remove any temporary files that might contain sensitive data
           rm -f /home/ansible/k8s_maintenance.log
           rm -f /home/ansible/docker_maintenance.log
-          rm -f /home/ansible/k8s_debug.log
-          rm -f /home/ansible/maintenance_summary.log
           rm -f /home/ansible/ansible-*.log
           rm -f k8s_maintenance_only.yml
           rm -f docker_maintenance_only.yml
-          echo "🧹 Cleaned up temporary files and playbooks"
+          echo "Cleanup completed"
 
   notify-completion:
     name: Send Notification
@@ -413,24 +379,20 @@ jobs:
           OVERALL_STATUS="${{ needs.sequential-maintenance.result }}"
           
           if [ "$OVERALL_STATUS" == "success" ]; then
-            STATUS="✅ SUCCESS"
+            STATUS="SUCCESS"
             MESSAGE="Sequential infrastructure maintenance completed - K8s: $K8S_STATUS, Docker: $DOCKER_STATUS"
-            EMOJI="🎉"
           elif [ "$OVERALL_STATUS" == "failure" ]; then
-            STATUS="❌ FAILED" 
+            STATUS="FAILED" 
             MESSAGE="Sequential infrastructure maintenance failed - K8s: $K8S_STATUS, Docker: $DOCKER_STATUS"
-            EMOJI="🚨"
           else
-            STATUS="⚠️  PARTIAL"
+            STATUS="PARTIAL"
             MESSAGE="Sequential infrastructure maintenance partially completed - check individual phase reports"
-            EMOJI="⚠️"
           fi
           
           # Check for dry run mode
           DRY_RUN_NOTE=""
           if [ "${{ github.event.inputs.dry_run }}" == "true" ]; then
             DRY_RUN_NOTE=" (DRY RUN - no changes made)"
-            EMOJI="🧪"
           fi
           
           # Comprehensive log entry
@@ -447,10 +409,10 @@ jobs:
           ================================================================
           EOF
           
-          echo "$EMOJI $MESSAGE$DRY_RUN_NOTE"
+          echo "$MESSAGE$DRY_RUN_NOTE"
           
           # Note about runner host reboot in live mode
           if [ "${{ github.event.inputs.dry_run }}" != "true" ]; then
-            echo "ℹ️  Note: If docker host maintenance ran in live mode, the runner may have rebooted"
+            echo "Note: If docker host maintenance ran in live mode, the runner may have rebooted"
             echo "   Check post-reboot logs for docker host maintenance completion status"
           fi
