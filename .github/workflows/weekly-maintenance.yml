@@ -77,15 +77,22 @@ jobs:
       - name: Verify inventory and connectivity
         run: |
           echo "🔍 Testing connectivity to all hosts using local SSH keys..."
+          echo "Current user: $(whoami)"
+          echo "Current directory: $(pwd)"
+          echo "SSH config directory: $(ls -la ~/.ssh/ || echo 'No .ssh directory')"
           
-          # Test K8s cluster connectivity (no sensitive output)
-          echo "Testing K8s cluster hosts:"
-          if ANSIBLE_HOST_KEY_CHECKING=False \
-             ANSIBLE_SSH_ARGS="-o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no" \
-             ansible k8s_cluster -i inventory/hosts.ini -m ping --one-line > /dev/null 2>&1; then
+          # Test direct SSH first
+          echo "Testing direct SSH to k8-primary:"
+          ssh -o ConnectTimeout=5 -o StrictHostKeyChecking=no k8-primary "echo 'Direct SSH works'" || echo "Direct SSH failed"
+          
+          # Test K8s cluster connectivity with verbose output for debugging
+          echo "Testing K8s cluster hosts with ansible:"
+          if ansible k8s_cluster -i inventory/hosts.ini -m ping --one-line -vv 2>&1 | tee /tmp/k8s_debug.log; then
             echo "✅ K8s cluster hosts reachable"
           else
             echo "❌ K8s cluster connectivity failed"
+            echo "Debug output:"
+            cat /tmp/k8s_debug.log | head -20
             exit 1
           fi
           
