@@ -224,7 +224,7 @@ jobs:
                 include_role:
                   name: gregheffner.ubuntu_patching.ubuntu_update
                 vars:
-                  reboot_enabled: true
+                  perform_reboot: true
           EOF
           
           echo "Docker playbook created"
@@ -274,13 +274,6 @@ jobs:
         if: always()
         run: |
           echo "Docker maintenance completed successfully before reboot."
-
-      - name: Reboot Docker Host
-        if: always()
-        run: |
-          echo "Rebooting Docker host..."
-          sudo /sbin/reboot
-          echo "Reboot initiated. The runner will stop here as it is on the same host."
 
       - name: Upload Docker Maintenance Report  
         if: always()
