@@ -279,7 +279,7 @@ jobs:
         if: always()
         run: |
           echo "Rebooting Docker host..."
-          ansible dockerhost -m ansible.builtin.reboot --one-line
+          sudo /sbin/reboot
           echo "Reboot initiated. The runner will stop here as it is on the same host."
 
       - name: Upload Docker Maintenance Report  
