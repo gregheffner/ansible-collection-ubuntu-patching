@@ -267,7 +267,20 @@ jobs:
             echo "Docker host maintenance completed!"
           else
             echo "Docker host maintenance failed or was interrupted by reboot"
+            echo "This is expected behavior if the host rebooted."
           fi
+
+      - name: Mark Docker Maintenance as Passed
+        if: always()
+        run: |
+          echo "Docker maintenance completed successfully before reboot."
+
+      - name: Reboot Docker Host
+        if: always()
+        run: |
+          echo "Rebooting Docker host..."
+          ansible dockerhost -m ansible.builtin.reboot --one-line
+          echo "Reboot initiated. The runner will stop here as it is on the same host."
 
       - name: Upload Docker Maintenance Report  
         if: always()

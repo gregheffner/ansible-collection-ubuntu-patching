@@ -1,14 +1,14 @@
----
 # Sample inventory file for Ubuntu patching collection
+# Copy this file and modify for your environment
 
 [k8s_cluster]
-m1 ansible_host=192.168.1.101
-w1 ansible_host=192.168.1.102
-w2 ansible_host=192.168.1.103
-w3 ansible_host=192.168.1.104
+k8s-master ansible_host=192.168.1.10
+k8s-worker1 ansible_host=192.168.1.11
+k8s-worker2 ansible_host=192.168.1.12
+k8s-worker3 ansible_host=192.168.1.13
 
-[docker]
-dockerhost ansible_host=localhost
+[dockerhost]
+dockerhost ansible_host=192.168.1.20
 
 [all:vars]
 ansible_user=ubuntu

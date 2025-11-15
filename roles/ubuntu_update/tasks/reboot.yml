@@ -42,6 +42,26 @@
     - (force_reboot | default(false)) or (reboot_required_debian.stat.exists | default(false))
     - (reboot_method | default('legacy') == 'legacy') or (ansible_connection == 'local')
 
+- name: Reboot the device and wait for it to come back online
+  hosts: all
+  tasks:
+    - block:
+        - name: Reboot the device
+          ansible.builtin.reboot:
+            reboot_timeout: 600
+
+        - name: Wait for SSH to become available
+          wait_for:
+            port: 22
+            host: "{{ inventory_hostname }}"
+            delay: 10
+            timeout: 300
+            state: started
+
+        - name: Ensure the device is reachable
+          ansible.builtin.ping:
+      become: true
+
 - name: Run post-reboot script if specified
   shell: |
     cd {{ post_reboot_script_path | dirname }}
