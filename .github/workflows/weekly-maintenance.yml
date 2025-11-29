@@ -21,5 +21,10 @@ jobs:
       - name: Write inventory from secret
         run: echo "${{ secrets.ANSIBLE_HOSTS }}" > hosts
 
+      - name: Export 1Password token
+        run: echo "OP_SERVICE_ACCOUNT_TOKEN=${{ secrets.OP_SERVICE_ACCOUNT_TOKEN }}" >> $GITHUB_ENV
+
       - name: Run sequential maintenance playbook
+        env:
+          OP_SERVICE_ACCOUNT_TOKEN: ${{ secrets.OP_SERVICE_ACCOUNT_TOKEN }}
         run: ansible-playbook -i hosts sequential_maintenance.yml
