@@ -7,18 +7,7 @@
   register: reboot_required_debian
   when: ansible_os_family == "Debian"
 
-- name: Reboot system (legacy method)
-  shell: systemctl reboot -i
-  ignore_errors: true
-  become: true
-  when: 
-    - perform_reboot | default(false)
-    - (force_reboot | default(false)) or (reboot_required_debian.stat.exists | default(false))
-    - (reboot_method | default('legacy') == 'legacy') or (ansible_connection == 'local')
-  async: 1
-  poll: 0
-
-- name: Reboot and wait for system to come back (remote only)
+- name: Reboot and wait for system to come back (modern method)
   reboot:
     reboot_timeout: "{{ reboot_timeout | default(600) }}"
     connect_timeout: "{{ connect_timeout | default(20) }}"
@@ -27,39 +16,21 @@
   when: 
     - perform_reboot | default(false)
     - (force_reboot | default(false)) or (reboot_required_debian.stat.exists | default(false))
-    - reboot_method | default('modern') == 'modern'
-    - ansible_connection != 'local'
 
-- name: Wait for system to come back after legacy reboot
-  wait_for_connection:
-    connect_timeout: "{{ connect_timeout | default(20) }}"
-    sleep: 5
+- name: Wait for SSH to become available
+  wait_for:
+    port: 22
+    host: "{{ inventory_hostname }}"
     delay: 10
-    timeout: "{{ reboot_timeout | default(600) }}"
-  become: false
-  when: 
-    - perform_reboot | default(false)
-    - (force_reboot | default(false)) or (reboot_required_debian.stat.exists | default(false))
-    - (reboot_method | default('legacy') == 'legacy') or (ansible_connection == 'local')
+    timeout: 300
+    state: started
+  become: true
+  when: perform_reboot | default(false)
 
-- name: Reboot the device and wait for it to come back online
-  tasks:
-    - block:
-        - name: Reboot the device
-          ansible.builtin.reboot:
-            reboot_timeout: 600
-
-        - name: Wait for SSH to become available
-          wait_for:
-            port: 22
-            host: "{{ inventory_hostname }}"
-            delay: 10
-            timeout: 300
-            state: started
-
-        - name: Ensure the device is reachable
-          ansible.builtin.ping:
-      become: true
+- name: Ensure the device is reachable
+  ansible.builtin.ping:
+  become: true
+  when: perform_reboot | default(false)
 
 - name: Run post-reboot script if specified
   shell: |
