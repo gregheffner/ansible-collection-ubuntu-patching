@@ -16,4 +16,4 @@
 
 - name: Include reboot tasks
   include_tasks: reboot.yml
-  when: perform_reboot | default(true)
+  when: perform_reboot | default(false)
