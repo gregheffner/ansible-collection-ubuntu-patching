@@ -28,5 +28,8 @@ jobs:
       - name: Download sequential maintenance playbook
         run: wget https://raw.githubusercontent.com/gregheffner/ansible-collection-ubuntu-patching/main/sequential_maintenance.yml
 
+      - name: Write inventory from secret
+        run: echo "${{ secrets.ANSIBLE_HOSTS }}" > hosts
+
       - name: Run sequential maintenance playbook
-        run: ansible-playbook sequential_maintenance.yml
+        run: ansible-playbook -i hosts sequential_maintenance.yml
