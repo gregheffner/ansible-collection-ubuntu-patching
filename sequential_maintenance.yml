@@ -2,6 +2,15 @@
 # Sequential Maintenance Playbook - K8s first, then Docker host
 # This ensures K8s maintenance completes before touching the docker host
 
+- name: Update Collection
+  hosts: localhost
+  gather_facts: false
+  tasks:
+    - name: Update gregheffner.ubuntu_patching collection
+      command: ansible-galaxy collection install gregheffner.ubuntu_patching --force
+      delegate_to: localhost
+      run_once: true
+
 - name: K8s Cluster Maintenance (Phase 1)
   hosts: k8s_cluster
   become: true
