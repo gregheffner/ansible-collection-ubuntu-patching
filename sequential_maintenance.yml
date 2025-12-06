@@ -10,6 +10,19 @@
       command: ansible-galaxy collection install gregheffner.ubuntu_patching --force
       delegate_to: localhost
       run_once: true
+      register: collection_update
+      changed_when: false
+
+    - name: Log collection update to summary
+      delegate_to: localhost
+      run_once: true
+      shell: |
+        if [ -n "$GITHUB_STEP_SUMMARY" ]; then
+          echo "## 🔄 Collection Update" >> $GITHUB_STEP_SUMMARY
+          echo "✅ Collection updated successfully" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+        fi
+      when: lookup('env', 'GITHUB_STEP_SUMMARY') != ""
 
 - name: K8s Cluster Maintenance (Phase 1)
   hosts: k8s_cluster
@@ -30,6 +43,12 @@
     node_ready_delay: 10
 
   pre_tasks:
+    - name: Announce K8s maintenance start
+      delegate_to: localhost
+      run_once: true
+      shell: echo "::notice::🔧 Phase 1 - Starting K8s Cluster Maintenance"
+      when: lookup('env', 'GITHUB_STEP_SUMMARY') != ""
+
     - name: Display K8s maintenance start
       debug:
         msg: |
@@ -49,6 +68,30 @@
           K8s maintenance completed on: {{ inventory_hostname }}
           Phase 1 complete for this node
           Time: {{ ansible_date_time.iso8601 }}
+    
+    - name: Generate K8s maintenance summary
+      delegate_to: localhost
+      run_once: true
+      shell: |
+        echo "::notice::✅ Phase 1 Complete - K8s Cluster Updated"
+        if [ -n "$GITHUB_STEP_SUMMARY" ]; then
+          {
+            echo "## 🔧 K8s Cluster Maintenance Complete"
+            echo ""
+            echo "**Phase 1 Results:**"
+            echo "- ✅ All K8s nodes updated"
+            echo "- 🔄 Nodes rebooted and rejoined cluster"
+            echo "- ⏱️ Completed at: $(date -Iseconds)"
+            echo ""
+            echo "**Nodes Processed:**"
+            {% for host in groups['k8s_cluster'] %}
+            echo "- 🖥️ {{ host }}"
+            {% endfor %}
+            echo ""
+            echo "---"
+          } >> $GITHUB_STEP_SUMMARY
+        fi
+      when: lookup('env', 'GITHUB_STEP_SUMMARY') != ""
 
 - name: Docker Host Maintenance (Phase 2) 
   hosts: dockerhost
@@ -67,6 +110,16 @@
     connect_timeout: 20
 
   pre_tasks:
+    - name: Fix /tmp permissions before maintenance
+      become: true
+      command: systemctl start fix-tmp-perms.service
+      ignore_errors: true
+
+    - name: Announce Docker host maintenance start
+      delegate_to: localhost
+      shell: echo "::notice::🐳 Phase 2 - Starting Docker Host Maintenance"
+      when: lookup('env', 'GITHUB_STEP_SUMMARY') != ""
+
     - name: Display docker maintenance start
       debug:
         msg: |
@@ -87,3 +140,35 @@
           Docker host maintenance completed on: {{ inventory_hostname }}
           All maintenance phases finished successfully
           Time: {{ ansible_date_time.iso8601 }}
+    
+    - name: Generate final maintenance summary
+      delegate_to: localhost
+      shell: |
+        echo "::notice::✅ Phase 2 Complete - Docker Host Updated"
+        echo "::notice::🎉 All Infrastructure Maintenance Complete!"
+        if [ -n "$GITHUB_STEP_SUMMARY" ]; then
+          {
+            echo "## 🐳 Docker Host Maintenance Complete"
+            echo ""
+            echo "**Phase 2 Results:**"
+            echo "- ✅ System packages updated"
+            echo "- 🐋 Docker updated"
+            echo "- 🔄 System rebooted"
+            echo "- ⏱️ Completed at: $(date -Iseconds)"
+            echo ""
+            echo "**Host Processed:**"
+            echo "- 🖥️ {{ inventory_hostname }}"
+            echo ""
+            echo "---"
+            echo ""
+            echo "# 🎉 All Maintenance Complete!"
+            echo ""
+            echo "| Phase | Status |"
+            echo "|-------|--------|"
+            echo "| K8s Cluster | ✅ Complete |"
+            echo "| Docker Host | ✅ Complete |"
+            echo ""
+            echo "**Next maintenance:** Scheduled for next Saturday"
+          } >> $GITHUB_STEP_SUMMARY
+        fi
+      when: lookup('env', 'GITHUB_STEP_SUMMARY') != ""

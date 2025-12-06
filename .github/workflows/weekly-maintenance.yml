@@ -9,22 +9,64 @@ jobs:
   maintenance:
     runs-on: self-hosted
     steps:
-      - name: Checkout repository
+      - name: 📋 Setup - Checkout repository
         uses: actions/checkout@v4
 
-      - name: Install Ubuntu Patching Collection
-        run: ansible-galaxy collection install gregheffner.ubuntu_patching
+      - name: 📦 Setup - Install Ubuntu Patching Collection
+        run: |
+          echo "::group::Installing collection"
+          ansible-galaxy collection install gregheffner.ubuntu_patching
+          echo "::endgroup::"
 
-      - name: Download sequential maintenance playbook
-        run: wget https://raw.githubusercontent.com/gregheffner/ansible-collection-ubuntu-patching/main/sequential_maintenance.yml
+      - name: 📥 Setup - Download playbook
+        run: |
+          echo "::group::Downloading sequential maintenance playbook"
+          wget https://raw.githubusercontent.com/gregheffner/ansible-collection-ubuntu-patching/main/sequential_maintenance.yml
+          echo "::endgroup::"
 
-      - name: Write inventory from secret
-        run: echo "${{ secrets.ANSIBLE_HOSTS }}" > hosts
+      - name: 🔐 Setup - Configure credentials
+        run: |
+          echo "::group::Writing inventory and exporting secrets"
+          echo "${{ secrets.ANSIBLE_HOSTS }}" > hosts
+          echo "OP_SERVICE_ACCOUNT_TOKEN=${{ secrets.OP_SERVICE_ACCOUNT_TOKEN }}" >> $GITHUB_ENV
+          echo "::endgroup::"
 
-      - name: Export 1Password token
-        run: echo "OP_SERVICE_ACCOUNT_TOKEN=${{ secrets.OP_SERVICE_ACCOUNT_TOKEN }}" >> $GITHUB_ENV
-
-      - name: Run sequential maintenance playbook
+      - name: 🚀 Run Infrastructure Maintenance
         env:
           OP_SERVICE_ACCOUNT_TOKEN: ${{ secrets.OP_SERVICE_ACCOUNT_TOKEN }}
-        run: ansible-playbook -i hosts sequential_maintenance.yml
+          ANSIBLE_DISPLAY_SKIPPED_HOSTS: 'false'
+          ANSIBLE_DISPLAY_OK_HOSTS: 'false'
+          ANSIBLE_STDOUT_CALLBACK: yaml
+        run: |
+          echo "::notice::🔄 Starting complete infrastructure maintenance"
+          ansible-playbook -i hosts sequential_maintenance.yml > /tmp/maintenance.log 2>&1
+          EXIT_CODE=$?
+          
+          if [ $EXIT_CODE -eq 0 ]; then
+            echo "::notice::✅ All maintenance tasks completed successfully"
+          else
+            echo "::error::❌ Maintenance failed with exit code $EXIT_CODE"
+            tail -50 /tmp/maintenance.log
+            exit $EXIT_CODE
+          fi
+
+      - name: 📊 Generate Maintenance Report
+        if: always()
+        run: |
+          echo "## 🔧 Infrastructure Maintenance Report" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Execution Date:** $(date)" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          # Extract and display play recap
+          if [ -f /tmp/maintenance.log ] && grep -q "PLAY RECAP" /tmp/maintenance.log; then
+            echo "### 📈 Ansible Play Recap" >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+            grep -A 10 "PLAY RECAP" /tmp/maintenance.log >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Final Status:** ${{ job.status }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Full logs saved to: \`/tmp/maintenance.log\`" >> $GITHUB_STEP_SUMMARY
