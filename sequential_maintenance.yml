@@ -28,7 +28,6 @@
     k8s_reboot_timeout: 600
     node_ready_retries: 30
     node_ready_delay: 10
-    update_log_path: "/tmp/k8s_maintenance.log"
 
   pre_tasks:
     - name: Display K8s maintenance start
@@ -66,7 +65,6 @@
     reboot_method: "modern"
     reboot_timeout: 600
     connect_timeout: 20
-    update_log_path: "/tmp/docker_maintenance.log"
 
   pre_tasks:
     - name: Display docker maintenance start
