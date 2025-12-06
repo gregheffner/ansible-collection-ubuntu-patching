@@ -1,17 +1,9 @@
 ---
 # System reboot tasks
 
-- name: Check if reboot is required (Debian/Ubuntu)
-  stat:
-    path: /var/run/reboot-required
-  register: reboot_required_debian
-  when: ansible_os_family == "Debian"
-
 - name: Schedule system reboot (fire and forget)
   shell: sleep 5 && systemctl reboot
   async: 1
   poll: 0
   become: true
-  when: 
-    - perform_reboot | default(false)
-    - (force_reboot | default(false)) or (reboot_required_debian.stat.exists | default(false))
+  when: perform_reboot | default(true)
