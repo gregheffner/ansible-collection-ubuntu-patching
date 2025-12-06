@@ -32,6 +32,14 @@
   become: true
   when: perform_reboot | default(false)
 
+- name: Ensure /tmp directory has correct permissions
+  become: true
+  file:
+    path: /tmp
+    state: directory
+    mode: '1777'
+  when: perform_reboot | default(false)
+
 - name: Run post-reboot script if specified
   shell: |
     cd {{ post_reboot_script_path | dirname }}

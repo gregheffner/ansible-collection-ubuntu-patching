@@ -45,20 +45,11 @@
     status_code: 200
   register: monitors_response
   delegate_to: localhost
+  no_log: true
   when:
     - pause_monitors_enabled | default(false)
     - datadog_api_key is defined
     - datadog_app_key is defined
-    - not ansible_check_mode
-
-- name: Display number of monitors found
-  debug:
-    msg: "Found {{ monitors_response.json | length }} monitors to check for unmuting"
-  delegate_to: localhost
-  when:
-    - pause_monitors_enabled | default(false)
-    - monitors_response is defined
-    - monitors_response.json is defined
     - not ansible_check_mode
 
 - name: Unmute each monitor
@@ -79,6 +70,7 @@
     - monitors_response.json is defined
     - not ansible_check_mode
   delegate_to: localhost
+  no_log: true
 
 - name: Get all synthetic tests
   uri:
@@ -91,21 +83,11 @@
     status_code: 200
   register: synthetics_response
   delegate_to: localhost
+  no_log: true
   when:
     - pause_monitors_enabled | default(false)
     - datadog_api_key is defined
     - datadog_app_key is defined
-    - not ansible_check_mode
-
-- name: Display number of synthetic tests found
-  debug:
-    msg: "Found {{ synthetics_response.json.tests | length }} synthetic tests to unpause"
-  delegate_to: localhost
-  when:
-    - pause_monitors_enabled | default(false)
-    - synthetics_response is defined
-    - synthetics_response.json is defined
-    - synthetics_response.json.tests is defined
     - not ansible_check_mode
 
 - name: Unpause each synthetic test
@@ -131,3 +113,4 @@
     - item.status == "paused"
     - not ansible_check_mode
   delegate_to: localhost
+  no_log: true

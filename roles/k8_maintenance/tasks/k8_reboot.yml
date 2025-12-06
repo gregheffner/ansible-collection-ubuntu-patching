@@ -47,3 +47,12 @@
     KUBECONFIG: "{{ kubeconfig_path | default('/home/huey/.kube/config') }}"
     KUBERNETES_MASTER: "{{ k8s_api_server | default('') }}"
   failed_when: uncordon_result.rc != 0
+
+- name: Fix /tmp permissions on Ansible controller
+  become: true
+  file:
+    path: /tmp
+    state: directory
+    mode: '1777'
+  delegate_to: localhost
+  run_once: true
