@@ -1,0 +1,72 @@
+name: K8s Cluster Maintenance Only
+
+on:
+  workflow_dispatch:
+
+jobs:
+  k8s-maintenance:
+    runs-on: self-hosted
+    steps:
+      - name: 📋 Setup - Checkout repository
+        uses: actions/checkout@v4
+
+      - name: 📦 Setup - Install Ubuntu Patching Collection
+        run: |
+          echo "::group::Installing collection"
+          ansible-galaxy collection install gregheffner.ubuntu_patching --force
+          echo "::endgroup::"
+
+      - name: 📥 Setup - Download playbook
+        run: |
+          echo "::group::Downloading playbook"
+          wget https://raw.githubusercontent.com/gregheffner/ansible-collection-ubuntu-patching/main/smart_all_roles.yml
+          echo "::endgroup::"
+
+      - name: 🔐 Setup - Configure credentials
+        run: |
+          echo "::group::Writing inventory and exporting secrets"
+          echo "${{ secrets.ANSIBLE_HOSTS }}" > hosts
+          echo "OP_SERVICE_ACCOUNT_TOKEN=${{ secrets.OP_SERVICE_ACCOUNT_TOKEN }}" >> $GITHUB_ENV
+          echo "::endgroup::"
+
+      - name: 🔧 Run K8s Maintenance
+        env:
+          OP_SERVICE_ACCOUNT_TOKEN: ${{ secrets.OP_SERVICE_ACCOUNT_TOKEN }}
+          ANSIBLE_DISPLAY_SKIPPED_HOSTS: 'false'
+          ANSIBLE_DISPLAY_OK_HOSTS: 'false'
+          ANSIBLE_STDOUT_CALLBACK: yaml
+        run: |
+          echo "::notice::🔧 Starting K8s cluster maintenance only"
+          ansible-playbook -i hosts smart_all_roles.yml --tags k8s_maintenance > /tmp/k8s_maintenance.log 2>&1
+          EXIT_CODE=$?
+          
+          if [ $EXIT_CODE -eq 0 ]; then
+            echo "::notice::✅ K8s maintenance completed successfully"
+          else
+            echo "::error::❌ K8s maintenance failed with exit code $EXIT_CODE"
+            tail -50 /tmp/k8s_maintenance.log
+            exit $EXIT_CODE
+          fi
+
+      - name: 📊 Generate K8s Maintenance Report
+        if: always()
+        run: |
+          echo "## 🔧 K8s Cluster Maintenance Report" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Execution Date:** $(date)" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Scope:** K8s maintenance tasks only (no system updates)" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          # Extract and display play recap
+          if [ -f /tmp/k8s_maintenance.log ] && grep -q "PLAY RECAP" /tmp/k8s_maintenance.log; then
+            echo "### 📈 Ansible Play Recap" >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+            grep -A 10 "PLAY RECAP" /tmp/k8s_maintenance.log >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Final Status:** ${{ job.status }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Full logs saved to: \`/tmp/k8s_maintenance.log\`" >> $GITHUB_STEP_SUMMARY
