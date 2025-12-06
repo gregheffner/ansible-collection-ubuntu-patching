@@ -7,52 +7,11 @@
   register: reboot_required_debian
   when: ansible_os_family == "Debian"
 
-- name: Reboot and wait for system to come back (modern method)
-  reboot:
-    reboot_timeout: "{{ reboot_timeout | default(600) }}"
-    connect_timeout: "{{ connect_timeout | default(20) }}"
-    test_command: whoami
+- name: Schedule system reboot (fire and forget)
+  shell: sleep 5 && systemctl reboot
+  async: 1
+  poll: 0
   become: true
   when: 
     - perform_reboot | default(false)
     - (force_reboot | default(false)) or (reboot_required_debian.stat.exists | default(false))
-
-- name: Wait for SSH to become available
-  wait_for:
-    port: 22
-    host: "{{ inventory_hostname }}"
-    delay: 10
-    timeout: 300
-    state: started
-  become: true
-  when: perform_reboot | default(false)
-
-- name: Ensure the device is reachable
-  ansible.builtin.ping:
-  become: true
-  when: perform_reboot | default(false)
-
-- name: Ensure /tmp directory has correct permissions
-  become: true
-  file:
-    path: /tmp
-    state: directory
-    mode: '1777'
-  when: perform_reboot | default(false)
-
-- name: Run post-reboot script if specified
-  shell: |
-    cd {{ post_reboot_script_path | dirname }}
-    source {{ post_reboot_script_path | basename }}
-  when: 
-    - post_reboot_script_path is defined
-    - post_reboot_script_path != ""
-  register: post_reboot_result
-  ignore_errors: true
-
-- name: Display post-reboot script result
-  debug:
-    msg: "Post-reboot script executed: {{ 'SUCCESS' if post_reboot_result.rc == 0 else 'FAILED' }}"
-  when: 
-    - post_reboot_script_path is defined
-    - post_reboot_result is defined
