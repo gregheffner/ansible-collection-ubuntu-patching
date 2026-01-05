@@ -7,51 +7,51 @@ jobs:
   ubuntu-updates:
     runs-on: self-hosted
     steps:
-      - name: 📋 Setup - Checkout repository
+      - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: 📦 Setup - Install Ubuntu Patching Collection
+      - name: Install Ubuntu Patching Collection
         run: |
           echo "::group::Installing collection"
           ansible-galaxy collection install gregheffner.ubuntu_patching --force
           echo "::endgroup::"
 
-      - name: 📥 Setup - Download playbook
+      - name: Download maintenance playbook
         run: |
           echo "::group::Downloading playbook"
           wget https://raw.githubusercontent.com/gregheffner/ansible-collection-ubuntu-patching/main/smart_all_roles.yml
           echo "::endgroup::"
 
-      - name: 🔐 Setup - Configure credentials
+      - name: Configure Ansible credentials
         run: |
           echo "::group::Writing inventory and exporting secrets"
           echo "${{ secrets.ANSIBLE_HOSTS }}" > hosts
           echo "OP_SERVICE_ACCOUNT_TOKEN=${{ secrets.OP_SERVICE_ACCOUNT_TOKEN }}" >> $GITHUB_ENV
           echo "::endgroup::"
 
-      - name: 📦 Run Ubuntu System Updates
+      - name: Run Ubuntu system updates
         env:
           OP_SERVICE_ACCOUNT_TOKEN: ${{ secrets.OP_SERVICE_ACCOUNT_TOKEN }}
           ANSIBLE_DISPLAY_SKIPPED_HOSTS: 'false'
           ANSIBLE_DISPLAY_OK_HOSTS: 'false'
           ANSIBLE_STDOUT_CALLBACK: yaml
         run: |
-          echo "::notice::📦 Starting Ubuntu system updates only"
+          echo "::notice::Starting Ubuntu system updates"
           ansible-playbook -i hosts smart_all_roles.yml --tags ubuntu_update > /tmp/ubuntu_update.log 2>&1
           EXIT_CODE=$?
           
           if [ $EXIT_CODE -eq 0 ]; then
-            echo "::notice::✅ Ubuntu updates completed successfully"
+            echo "::notice::Ubuntu updates completed successfully"
           else
-            echo "::error::❌ Ubuntu updates failed with exit code $EXIT_CODE"
+            echo "::error::Ubuntu updates failed with exit code $EXIT_CODE"
             tail -50 /tmp/ubuntu_update.log
             exit $EXIT_CODE
           fi
 
-      - name: 📊 Generate Ubuntu Update Report
+      - name: Generate Ubuntu update report
         if: always()
         run: |
-          echo "## 📦 Ubuntu System Updates Report" >> $GITHUB_STEP_SUMMARY
+          echo "## Ubuntu System Updates Report" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**Execution Date:** $(date)" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
@@ -60,7 +60,7 @@ jobs:
           
           # Extract and display play recap
           if [ -f /tmp/ubuntu_update.log ] && grep -q "PLAY RECAP" /tmp/ubuntu_update.log; then
-            echo "### 📈 Ansible Play Recap" >> $GITHUB_STEP_SUMMARY
+            echo "### Ansible Play Recap" >> $GITHUB_STEP_SUMMARY
             echo '```' >> $GITHUB_STEP_SUMMARY
             grep -A 10 "PLAY RECAP" /tmp/ubuntu_update.log >> $GITHUB_STEP_SUMMARY
             echo '```' >> $GITHUB_STEP_SUMMARY
