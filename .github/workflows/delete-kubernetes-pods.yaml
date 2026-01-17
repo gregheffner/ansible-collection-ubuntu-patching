@@ -27,6 +27,4 @@ jobs:
 
       - name: Delete pods in all namespaces
         run: |
-          for ns in automation kubernetes-dashboard default prod radar; do
-            kubectl delete pods --all -n "$ns"
-          done
+          kubectl get ns -o jsonpath='{.items[*].metadata.name}' | xargs -n1 -I{} kubectl delete pods --all -n {}
