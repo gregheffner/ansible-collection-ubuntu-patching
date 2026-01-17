@@ -7,7 +7,7 @@ jobs:
       - name: Check last weekly-maintenance run status
         id: check_status
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.MY_API_KEY }}
         run: |
           STATUS=$(gh run list --workflow=weekly-maintenance.yml --limit=1 --json conclusion -q '.[0].conclusion')
           if [ "$STATUS" != "success" ]; then
