@@ -6,6 +6,8 @@ on:
     secrets:
       KUBECONFIG:
         required: true
+  schedule:
+    - cron: '0 7 * * 6'
 
 jobs:
   delete-pods:
@@ -16,7 +18,7 @@ jobs:
       - name: Check last weekly-maintenance run status
         id: check_status
         env:
-          GITHUB_TOKEN: ${{ secrets.MY_API_KEY }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           STATUS=$(gh run list --workflow=weekly-maintenance.yml --limit=1 --json conclusion -q '.[0].conclusion')
           if [ "$STATUS" != "success" ]; then
