@@ -70,3 +70,9 @@ jobs:
           echo "**Final Status:** ${{ job.status }}" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "Full logs saved to: \`/tmp/maintenance.log\`" >> $GITHUB_STEP_SUMMARY
+
+  delete-k8s-pods:
+    needs: maintenance
+    uses: .github/workflows/delete-kubernetes-pods.yaml@main
+    secrets:
+      KUBECONFIG: ${{ secrets.KUBECONFIG }}
