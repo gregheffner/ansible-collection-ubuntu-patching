@@ -1,10 +1,6 @@
 name: Delete all Pods
 
 on:
-  workflow_call:
-    secrets:
-      KUBECONFIG:
-        required: true
   workflow_dispatch:
 
 jobs:
