@@ -1,3 +1,10 @@
+on:
+  workflow_dispatch:
+  workflow_call:
+    secrets:
+      KUBECONFIG:
+        required: true
+
 jobs:
   delete-pods:
     runs-on: self-hosted
