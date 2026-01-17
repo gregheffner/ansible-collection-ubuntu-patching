@@ -73,6 +73,6 @@ jobs:
 
   delete-k8s-pods:
     needs: maintenance
-    uses: ./.github/workflows/delete-kubernetes-pods.yaml@main
+    uses: ./.github/workflows/delete-kubernetes-pods.yaml
     secrets:
       KUBECONFIG: ${{ secrets.KUBECONFIG }}
