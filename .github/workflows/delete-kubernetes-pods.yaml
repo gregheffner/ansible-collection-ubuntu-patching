@@ -1,14 +1,20 @@
-name: Delete all Pods
-
-on:
-  workflow_dispatch:
-
 jobs:
   delete-pods:
     runs-on: self-hosted
     env:
       KUBECONFIG: ${{ github.workspace }}/kubeconfig
     steps:
+      - name: Check last weekly-maintenance run status
+        id: check_status
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          STATUS=$(gh run list --workflow=weekly-maintenance.yml --limit=1 --json conclusion -q '.[0].conclusion')
+          if [ "$STATUS" != "success" ]; then
+            echo "Last weekly-maintenance.yml run was not successful. Exiting."
+            exit 1
+          fi
+
       - name: Configure Kubeconfig
         run: echo "${{ secrets.KUBECONFIG }}" > kubeconfig
 
