@@ -29,4 +29,6 @@ jobs:
 
       - name: Delete pods in all namespaces
         run: |
-          kubectl get ns -o jsonpath='{.items[*].metadata.name}' | xargs -n1 -I{} kubectl delete pods --all -n {}
+          for ns in $(kubectl get ns -o jsonpath='{.items[*].metadata.name}'); do
+            kubectl delete pods --all -n "$ns" || true
+          done
