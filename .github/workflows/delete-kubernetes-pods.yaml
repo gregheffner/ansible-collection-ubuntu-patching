@@ -1,13 +1,22 @@
-name: Delete all Pods
+name: Delete all Pods (Selection)
 
 on:
   workflow_dispatch:
-  workflow_call:
-    secrets:
-      KUBECONFIG:
+    inputs:
+      namespace:
+        description: 'Namespace to delete pods from'
         required: true
+        default: 'all'
+        type: choice
+        options:
+          - all
+          - automation
+          - kubernetes-dashboard
+          - default
+          - prod
+          - radar
   schedule:
-    - cron: '0 7 * * 6'
+    - cron: '0 6 * * 6
 
 jobs:
   delete-pods:
@@ -15,22 +24,15 @@ jobs:
     env:
       KUBECONFIG: ${{ github.workspace }}/kubeconfig
     steps:
-      - name: Check last weekly-maintenance run status
-        id: check_status
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          STATUS=$(gh run list --workflow=weekly-maintenance.yml --limit=1 --json conclusion -q '.[0].conclusion')
-          if [ "$STATUS" != "success" ]; then
-            echo "Last weekly-maintenance.yml run was not successful. Exiting."
-            exit 1
-          fi
-
       - name: Configure Kubeconfig
         run: echo "${{ secrets.KUBECONFIG }}" > kubeconfig
 
-      - name: Delete pods in all namespaces
+      - name: Delete pods in selected namespaces
         run: |
-          for ns in $(kubectl get ns -o jsonpath='{.items[*].metadata.name}'); do
-            kubectl delete pods --all -n "$ns" || true
-          done
+          if [ "${{ github.event.inputs.namespace }}" = "all" ]; then
+            for ns in automation kubernetes-dashboard default prod radar; do
+              kubectl delete pods --all -n "$ns"
+            done
+          else
+            kubectl delete pods --all -n "${{ github.event.inputs.namespace }}"
+          fi
