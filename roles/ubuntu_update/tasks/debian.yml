@@ -10,7 +10,7 @@
 - name: Upgrade APT packages
   become: true
   apt:
-    upgrade: 'yes'
+    upgrade: dist
 
 - name: Clean up APT packages
   become: true
