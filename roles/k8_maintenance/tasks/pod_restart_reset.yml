@@ -1,0 +1,123 @@
+---
+# Post-patch pod-restart-reset (cluster health step)
+#
+# After serial drain/reboot/uncordon, application pods carry non-zero RESTARTS.
+# This step deletes ONLY controller-owned application pods whose restart count
+# is > 0, so their controllers recreate them and RESTARTS returns to 0 — a clean
+# post-patch health baseline. Cluster services are never touched.
+#
+# Runs ONCE, after the whole cluster is patched and every node is Ready.
+# All kubectl runs on the control-plane, matching the role's existing pattern.
+#
+# Three independent exclusion layers (a pod must clear ALL to be deleted):
+#   1. Namespace deny-list  -> cluster-service namespaces (kube-system, CNI, etc.)
+#   2. Static/mirror-pod skip -> kubernetes.io/config.mirror annotation absent
+#                                (control-plane static pods are mirror pods; a
+#                                 delete would not reset their count anyway)
+#   3. Controller-owned only -> an ownerReference with controller:true and
+#                               kind != Node (so a controller WILL recreate it)
+
+- name: Pod-restart-reset (delegated to control-plane, run once)
+  delegate_to: "{{ k8_primary_node | default('k8-primary') }}"
+  run_once: true
+  environment:
+    KUBECONFIG: "{{ kubeconfig_path | default('/home/huey/.kube/config') }}"
+    KUBERNETES_MASTER: "{{ k8s_api_server | default('') }}"
+  vars:
+    _tls: "{{ '--insecure-skip-tls-verify' if k8s_skip_tls_verify | default(false) else '' }}"
+    _dry_run: "{{ pod_restart_reset_dry_run | default(false) or ansible_check_mode }}"
+  block:
+
+    - name: Re-confirm every node is Ready before touching pods
+      command: >-
+        kubectl get nodes
+        -o jsonpath='{range .items[*]}{.status.conditions[?(@.type=="Ready")].status}{"\n"}{end}'
+        {{ _tls }}
+      register: prr_nodes
+      changed_when: false
+      failed_when: "'False' in prr_nodes.stdout_lines or 'Unknown' in prr_nodes.stdout_lines"
+
+    - name: Gather all pods cluster-wide as JSON
+      command: kubectl get pods --all-namespaces -o json {{ _tls }}
+      register: prr_pods_json
+      changed_when: false
+      check_mode: false
+
+    - name: Select controller-owned app pods with RESTARTS > 0
+      set_fact:
+        prr_targets: >-
+          {{ prr_targets | default([]) + [item.metadata.namespace ~ '/' ~ item.metadata.name] }}
+      loop: "{{ (prr_pods_json.stdout | from_json)['items'] }}"
+      loop_control:
+        label: "{{ item.metadata.namespace }}/{{ item.metadata.name }}"
+      when:
+        # 1. not a cluster-service namespace
+        - item.metadata.namespace not in pod_restart_reset_exclude_namespaces
+        # 2. not a static/mirror pod (control-plane pods carry this annotation)
+        - "'kubernetes.io/config.mirror' not in (item.metadata.annotations | default({}))"
+        # 3. owned by a real controller (kind != Node) that will recreate it
+        - >-
+          (item.metadata.ownerReferences | default([])
+           | selectattr('controller', 'defined') | selectattr('controller')
+           | rejectattr('kind', 'equalto', 'Node') | list | length) > 0
+        # 4. RESTARTS > 0, summed across normal AND init containers
+        - >-
+          ((item.status.containerStatuses | default([]) | map(attribute='restartCount') | sum)
+           + (item.status.initContainerStatuses | default([]) | map(attribute='restartCount') | sum)) > 0
+
+    - name: Show pods selected for restart-count reset
+      debug:
+        msg: >-
+          [dry_run={{ _dry_run }}] {{ prr_targets | default([]) | length }} app pod(s)
+          will be deleted: {{ prr_targets | default(['<none — cluster already clean>']) }}
+
+    - name: Delete app pods with RESTARTS > 0 (throttled; controller recreates them)
+      command: >-
+        kubectl delete pod {{ item.split('/')[1] }} -n {{ item.split('/')[0] }} --wait=false
+        {{ '--dry-run=server' if _dry_run | bool else '' }} {{ _tls }}
+      loop: "{{ prr_targets | default([]) }}"
+      loop_control:
+        label: "{{ item }}"
+        pause: "{{ pod_restart_reset_delete_pause | default(5) }}"
+      throttle: 1
+      register: prr_deleted
+      changed_when: "'deleted' in (prr_deleted.stdout | default(''))"
+      failed_when:
+        - prr_deleted.rc != 0
+        - "'NotFound' not in (prr_deleted.stderr | default(''))"
+
+    - name: Wait for recreated app pods to become Ready
+      command: >-
+        kubectl get pods --all-namespaces {{ _tls }}
+        --field-selector=status.phase!=Succeeded,status.phase!=Failed
+        -o jsonpath='{range .items[*]}{.status.containerStatuses[*].ready}{"\n"}{end}'
+      register: prr_health
+      changed_when: false
+      until: "'false' not in prr_health.stdout"
+      retries: "{{ pod_restart_reset_health_retries | default(30) }}"
+      delay: "{{ pod_restart_reset_health_delay | default(10) }}"
+      when: not (_dry_run | bool) and (prr_targets | default([]) | length) > 0
+
+    - name: Assert RESTARTS are back to 0 for all non-excluded namespaces
+      command: >-
+        kubectl get pods --all-namespaces {{ _tls }}
+        -o jsonpath='{range .items[?(@.status.containerStatuses[0].restartCount>0)]}{.metadata.namespace}{"/"}{.metadata.name}{"\n"}{end}'
+      register: prr_recheck
+      changed_when: false
+      failed_when: >-
+        (prr_recheck.stdout_lines | default([])
+         | map('regex_replace', '^([^/]+)/.*$', '\1')
+         | reject('in', pod_restart_reset_exclude_namespaces) | list | length) > 0
+      when: not (_dry_run | bool) and (prr_targets | default([]) | length) > 0
+
+    - name: Record pod-restart-reset result to the maintenance log
+      delegate_to: localhost
+      lineinfile:
+        path: "{{ update_log_path | default('/mnt/QNAP/backuplogs/updates/updates.txt') }}"
+        create: true
+        insertafter: EOF
+        line: >-
+          {{ now().strftime('%Y-%m-%d %H:%M:%S') }} pod-restart-reset
+          dry_run={{ _dry_run }} deleted={{ prr_targets | default([]) | length }}
+          pods="{{ prr_targets | default([]) | join(',') }}"
+      ignore_errors: true

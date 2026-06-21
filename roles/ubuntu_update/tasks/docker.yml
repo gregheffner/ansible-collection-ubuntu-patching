@@ -7,13 +7,16 @@
   changed_when: false
   failed_when: false
 
-- name: Restart all Docker containers
+- name: Restart all Docker containers (skipped when a reboot will follow)
   shell: docker restart {{ item }}
   with_items: "{{ container_ids.stdout_lines }}"
-  when: 
+  when:
     - container_ids.stdout_lines is defined
     - container_ids.stdout_lines | length > 0
     - restart_docker_containers | default(true)
+    # A reboot restarts every container via its restart policy, so an explicit
+    # pre-reboot restart is redundant churn. Only restart when NOT rebooting.
+    - not (perform_reboot | default(true))
   register: container_restart_result
   ignore_errors: true
 

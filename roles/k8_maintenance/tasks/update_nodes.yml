@@ -13,6 +13,9 @@
     upgrade: dist
   when: ansible_os_family == "Debian"
 
-- name: Truncate Nginx logs
+- name: Truncate Nginx logs (only on nodes where nginx logs exist)
   become: true
-  shell: sudo truncate -s 0 /var/log/nginx/access.log /var/log/nginx/error.log
+  shell: truncate -s 0 /var/log/nginx/access.log /var/log/nginx/error.log
+  args:
+    removes: /var/log/nginx/access.log  # skip nodes without nginx instead of failing
+  changed_when: false

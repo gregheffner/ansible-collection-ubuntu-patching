@@ -26,6 +26,9 @@ This Ansible collection **automates complete infrastructure maintenance** for Ub
    - Waits for node to rejoin cluster
    - Uncordons node
    - Moves to next node
+   - **After all nodes are Ready:** resets application pod restart counters
+     (deletes app pods with `RESTARTS > 0` so controllers recreate them clean;
+     cluster services are never touched)
 4. **Phase 2: Docker Host** - After K8s is complete:
    - Updates system packages
    - Updates Docker
@@ -43,6 +46,7 @@ This Ansible collection **automates complete infrastructure maintenance** for Ub
 - Automated reboots with cluster health checks
 - Datadog monitor pause/unpause
 - Nginx log truncation
+- Post-patch pod-restart-reset (resets `RESTARTS` to 0 on application pods, excludes cluster services)
 
 **`ubuntu_update`** - Ubuntu system updates
 - APT package updates and upgrades
@@ -142,7 +146,9 @@ ansible-galaxy collection install .
 │  │  ├─ Reboot                        │
 │  │  ├─ Wait for ready                │
 │  │  └─ Uncordon node                 │
-│  └─ All nodes complete               │
+│  ├─ All nodes complete               │
+│  └─ Reset app pod restart counters   │
+│     (excludes cluster services)      │
 └───────────┬─────────────────────────┘
             │
             ▼
@@ -179,12 +185,31 @@ ansible-galaxy collection install .
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `pause_monitors_enabled` | `false` | Pause Datadog monitors during maintenance |
+| `pause_monitors_enabled` | `true` | Pause Datadog monitors during maintenance |
 | `pause_duration` | `3600` | How long to pause monitors (seconds) |
 | `k8_primary_node` | First node | K8s primary node for kubectl commands |
 | `reboot_delay` | `30` | Wait time before reboot (seconds) |
 | `node_ready_retries` | `30` | How many times to check node status |
 | `node_ready_delay` | `10` | Seconds between node status checks |
+| `pod_restart_reset_enabled` | `true` | Reset app pod restart counters after patching |
+| `pod_restart_reset_dry_run` | `false` | Preview only (`kubectl --dry-run=server`); also honored by `--check` |
+| `pod_restart_reset_delete_pause` | `5` | Seconds between pod deletions (anti-thundering-herd) |
+| `pod_restart_reset_health_retries` | `30` | Post-delete: times to wait for recreated pods to be Ready |
+| `pod_restart_reset_health_delay` | `10` | Seconds between readiness checks |
+| `pod_restart_reset_exclude_namespaces` | see defaults | Cluster-service namespaces never touched |
+
+#### Post-patch pod-restart-reset
+
+After every node is patched and `Ready`, the role deletes **only** controller-owned
+**application** pods whose restart count is `> 0`, so their controllers recreate
+them and `RESTARTS` returns to 0. A pod is deleted only if it clears **all three**
+gates: (1) not in `pod_restart_reset_exclude_namespaces`, (2) not a static/mirror
+pod (`kubernetes.io/config.mirror`), and (3) owned by a controller (`controller:
+true`, kind != `Node`). Control-plane static pods (etcd, apiserver, scheduler,
+controller-manager) are therefore never selected. Deletions are throttled one at a
+time, then the step waits for recreated pods to become Ready and asserts restarts
+are back to 0. Set `pod_restart_reset_dry_run: true` (or run with `--check`) to
+preview the kill list without deleting anything.
 
 ### Ubuntu Update Role Variables
 

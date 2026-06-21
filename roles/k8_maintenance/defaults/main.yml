@@ -18,6 +18,25 @@ reboot_timeout: 600
 node_ready_retries: 30
 node_ready_delay: 10
 
+# Post-patch pod-restart-reset (cluster health step)
+# Deletes controller-owned application pods with RESTARTS > 0 so their
+# controllers recreate them with a clean restart count. Cluster services are
+# always excluded (by namespace deny-list + static/mirror-pod + ownerRef gates).
+pod_restart_reset_enabled: true
+pod_restart_reset_dry_run: false        # true -> kubectl --dry-run=server, no deletes
+pod_restart_reset_delete_pause: 5       # seconds between pod deletions (anti-thundering-herd)
+pod_restart_reset_health_retries: 30    # post-delete: wait for recreated pods to be Ready
+pod_restart_reset_health_delay: 10
+# Cluster-service namespaces never touched by the restart-reset step.
+# (control-plane static pods are also protected by the mirror-pod + ownerRef gates)
+pod_restart_reset_exclude_namespaces:
+  - kube-system
+  - kube-flannel
+  - kube-node-lease
+  - kube-public
+  - local-path-storage
+  - monitoring
+
 # Logging settings
 update_log_path: "/mnt/QNAP/backuplogs/updates/updates.txt"
 

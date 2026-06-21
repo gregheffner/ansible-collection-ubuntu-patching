@@ -14,8 +14,15 @@
   include_tasks: k8_reboot.yml
   when: k8_maintenance_step in ['maintenance', 'all']
 
-- name: Execute Step 3 - Unpause Monitors
+- name: Execute Step 3 - Reset application pod restart counters (cluster health)
+  include_tasks: pod_restart_reset.yml
+  when:
+    - k8_maintenance_step in ['maintenance', 'all']
+    - pod_restart_reset_enabled | default(true)
+    - inventory_hostname == ansible_play_hosts_all[-1]
+
+- name: Execute Step 4 - Unpause Monitors
   include_tasks: unpause_monitors.yml
-  when: 
+  when:
     - k8_maintenance_step in ['unpause', 'all']
     - inventory_hostname == ansible_play_hosts_all[-1]
