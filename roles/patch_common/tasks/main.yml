@@ -90,11 +90,14 @@
     - snap_old.stdout_lines | default([]) | length > 0
 
 # ── BREW: cleanup ───────────────────────────────────────────────────────────
-- name: "brew | autoremove and cleanup"
-  ansible.builtin.command: "{{ brew_bin }} {{ item }}"
-  loop:
-    - autoremove
-    - cleanup -s
+# NOTE: `brew autoremove` is deliberately NOT run. On 2026-06-27 it deleted the
+# Homebrew `unbound` keg on dockerhost (Pi-hole's upstream resolver on :5335),
+# which broke cluster + LAN DNS after the patch reboot. `cleanup -s` only prunes
+# old versions and the download cache — it never removes an installed keg — so it
+# is safe. If brew disk usage ever needs trimming, run autoremove manually after
+# confirming nothing in use (e.g. unbound) is marked as a removable dependency.
+- name: "brew | cleanup old versions + cache"
+  ansible.builtin.command: "{{ brew_bin }} cleanup -s"
   become: false
   environment:
     HOME: "/home/{{ brew_stat.stat.pw_name }}"   # brew owner; robust when inventory omits ansible_user
