@@ -15,8 +15,10 @@ very next run.
 
 | Play | Hosts | What it does |
 |------|-------|--------------|
-| 1 — cluster | `k8s_cluster` (`serial: 1`) | per node: **drain → patch → reboot (verified) → wait Ready → uncordon**. Only advances to the next node once this one is back. |
-| 2 — rest | `ubuntu:!k8s_cluster` (= `dockerhost`) | patch, then **reboot only if required**, scheduled with `shutdown -r +1` so it fires *after* the job exits (the runner lives here). |
+| 1 — cluster | `k8s_cluster` (`serial: 1`) | per node: **drain → patch → truncate nginx logs → reboot → wait Ready → uncordon**. Only advances to the next node once this one is back. |
+| 2 — rest | `docker:!k8s_cluster` (= `dockerhost`) | patch, then **always reboot** (scheduled with `shutdown -r +1` so it fires *after* the job exits, since the runner lives here). |
+
+Every patch run **reboots** every host (k8s nodes inline; dockerhost deferred). nginx access/error logs (hostPath from the nginx pods) are truncated on each node before its reboot, so fail2ban doesn't re-ban old 404s when the pod rolls; the task self-skips on hosts without those logs.
 
 The package work is one shared role, [`roles/patch_common`](roles/patch_common/tasks/main.yml):
 
