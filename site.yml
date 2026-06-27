@@ -71,7 +71,11 @@
 # the job exits (shutdown -r +1) instead of killing the job mid-run.
 # ────────────────────────────────────────────────────────────────────────────
 - name: Patch standalone Ubuntu hosts (dockerhost last)
-  hosts: ubuntu:!k8s_cluster
+  # The `docker` group (dockerhost) exists in BOTH the CI secret inventory and
+  # /etc/ansible/hosts. The CI inventory has only [k8s_cluster] and [docker] —
+  # no [ubuntu] group — so target `docker` here. Add any future non-k8s Ubuntu
+  # hosts to this group to have them patched in this play.
+  hosts: docker:!k8s_cluster
   become: true
   gather_facts: true
 
