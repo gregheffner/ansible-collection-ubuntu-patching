@@ -1,5 +1,0 @@
----
-# Main task file for k8_maintenance role
-# Use unified workflow with step control, or legacy all-steps behavior
-- name: Execute maintenance workflow
-  include_tasks: unified.yml

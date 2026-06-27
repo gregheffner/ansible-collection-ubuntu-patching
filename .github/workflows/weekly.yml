@@ -1,0 +1,41 @@
+name: Weekly Patching
+
+on:
+  schedule:
+    # GitHub schedule crons are UTC. 11:00 UTC Sat = 07:00 EDT / 06:00 EST,
+    # i.e. Saturday morning Eastern. (Old job ran 06:00 UTC = 02:00 local and
+    # collided with apt-daily-upgrade.timer ~06:16 UTC; this avoids that.)
+    - cron: '0 11 * * 6'
+  workflow_dispatch:
+
+jobs:
+  patch:
+    runs-on: self-hosted
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Write inventory from secret
+        run: |
+          mkdir -p inventory
+          printf '%s\n' "${{ secrets.ANSIBLE_HOSTS }}" > inventory/hosts
+
+      - name: Run weekly patching
+        run: |
+          set -o pipefail
+          ansible-playbook -i inventory/hosts site.yml | tee /tmp/maintenance.log
+
+      - name: Summary
+        if: always()
+        run: |
+          {
+            echo "## Weekly Patching — $(date)"
+            echo ""
+            if grep -q "PLAY RECAP" /tmp/maintenance.log 2>/dev/null; then
+              echo '```'
+              sed -n '/PLAY RECAP/,$p' /tmp/maintenance.log
+              echo '```'
+            fi
+            echo ""
+            echo "**Status:** ${{ job.status }}"
+          } >> "$GITHUB_STEP_SUMMARY"

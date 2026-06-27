@@ -1,9 +1,0 @@
----
-# System reboot tasks
-
-- name: Schedule system reboot (fire and forget)
-  shell: sleep 5 && systemctl reboot
-  async: 1
-  poll: 0
-  become: true
-  when: perform_reboot | default(true)
