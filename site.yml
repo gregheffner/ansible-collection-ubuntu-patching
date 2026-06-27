@@ -1,0 +1,87 @@
+---
+# Weekly patching for the Ubuntu fleet.
+#   Play 1 — k8s cluster, ONE node at a time (cluster stays live).
+#   Play 2 — everything else (dockerhost), rebooted LAST because it runs the runner.
+#
+# Run directly from this checkout:  ansible-playbook -i inventory/hosts site.yml
+# Package work (apt + snap + brew + cleanup) lives in the `patch_common` role,
+# so both plays share exactly one definition of "patch this box".
+
+# ────────────────────────────────────────────────────────────────────────────
+# PLAY 1: Kubernetes cluster — drain → patch → reboot → wait Ready → uncordon
+# ────────────────────────────────────────────────────────────────────────────
+- name: Patch the Kubernetes cluster (one node at a time)
+  hosts: k8s_cluster
+  serial: 1                      # exactly one node in flight; cluster keeps quorum/capacity
+  become: true
+  gather_facts: true
+  vars:
+    # All kubectl runs go through the control-plane node, which holds the kubeconfig.
+    kube_control_host: k8-primary
+    kubeconfig: /home/huey/.kube/config
+
+  pre_tasks:
+    - name: "Drain {{ inventory_hostname }} (cordon + evict workloads)"
+      ansible.builtin.command:
+        cmd: >-
+          kubectl --kubeconfig {{ kubeconfig }} drain {{ inventory_hostname }}
+          --ignore-daemonsets --delete-emptydir-data --force --timeout=300s
+      delegate_to: "{{ kube_control_host }}"
+      changed_when: true
+      when: not ansible_check_mode     # node lifecycle is runtime-only; skip in --check
+
+  roles:
+    - role: patch_common
+
+  post_tasks:
+    - name: "Reboot {{ inventory_hostname }} to apply updates (verified come-back)"
+      ansible.builtin.reboot:
+        reboot_timeout: 900
+        post_reboot_delay: 30
+        msg: "Weekly patching reboot"
+      when: not ansible_check_mode
+
+    - name: "Wait for {{ inventory_hostname }} to report Ready"
+      ansible.builtin.command:
+        cmd: >-
+          kubectl --kubeconfig {{ kubeconfig }} get node {{ inventory_hostname }}
+          -o jsonpath={.status.conditions[?(@.type=="Ready")].status}
+      delegate_to: "{{ kube_control_host }}"
+      register: node_ready
+      changed_when: false
+      retries: 60                # up to ~10 min for the API/node to come back
+      delay: 10
+      until: node_ready.stdout == "True"
+      when: not ansible_check_mode
+
+    - name: "Uncordon {{ inventory_hostname }} (resume scheduling)"
+      ansible.builtin.command:
+        cmd: "kubectl --kubeconfig {{ kubeconfig }} uncordon {{ inventory_hostname }}"
+      delegate_to: "{{ kube_control_host }}"
+      changed_when: true
+      when: not ansible_check_mode
+
+# ────────────────────────────────────────────────────────────────────────────
+# PLAY 2: Everything else (dockerhost) — patched and rebooted LAST.
+# dockerhost runs the self-hosted runner, so its reboot is SCHEDULED for after
+# the job exits (shutdown -r +1) instead of killing the job mid-run.
+# ────────────────────────────────────────────────────────────────────────────
+- name: Patch standalone Ubuntu hosts (dockerhost last)
+  hosts: ubuntu:!k8s_cluster
+  become: true
+  gather_facts: true
+
+  roles:
+    - role: patch_common
+
+  post_tasks:
+    - name: Check whether a reboot is required
+      ansible.builtin.stat:
+        path: /var/run/reboot-required
+      register: reboot_required
+
+    - name: Schedule reboot after the job exits (this host runs the runner)
+      ansible.builtin.command:
+        cmd: shutdown -r +1 "Weekly patching reboot (scheduled)"
+      when: reboot_required.stat.exists
+      changed_when: true

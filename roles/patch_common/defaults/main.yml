@@ -1,0 +1,16 @@
+---
+# Which package managers to touch on a host. Tasks self-skip if the manager
+# isn't installed, so these are usually fine left at true everywhere.
+patch_apt: true
+patch_snap: true
+patch_brew: true
+
+# Homebrew (Linuxbrew) MUST run as its owning user, never root.
+# On this fleet the brew owner == the SSH login user on every host
+# (ansible on dockerhost, huey on the k8s nodes), so brew tasks just drop
+# `become` and run as that login user. brew_bin is the shared prefix path.
+brew_bin: /home/linuxbrew/.linuxbrew/bin/brew
+
+# Wait this long (seconds) for the dpkg/apt lock instead of failing instantly,
+# so we don't lose a race with apt-daily / unattended-upgrades timers.
+apt_lock_timeout: 300

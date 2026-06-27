@@ -1,0 +1,104 @@
+---
+# Upgrade every package manager present on the host, then clean up.
+# Order: upgrade (apt → snap → brew), then cleanup (apt → snap → brew).
+# Held packages (kubelet/kubeadm/kubectl/containerd.io on k8s nodes) are
+# skipped automatically by apt — no special handling needed here.
+
+# ── APT: upgrade ────────────────────────────────────────────────────────────
+- name: "apt | update cache and dist-upgrade"
+  ansible.builtin.apt:
+    update_cache: true
+    cache_valid_time: 3600
+    upgrade: dist
+    lock_timeout: "{{ apt_lock_timeout }}"
+  become: true
+  when: patch_apt | bool
+
+# ── SNAP: upgrade ───────────────────────────────────────────────────────────
+- name: "snap | detect"
+  ansible.builtin.stat:
+    path: /usr/bin/snap
+  register: snap_check
+
+- name: "snap | refresh all snaps"
+  ansible.builtin.command: snap refresh
+  become: true
+  register: snap_refresh
+  changed_when: "'All snaps up to date' not in snap_refresh.stdout"
+  when:
+    - patch_snap | bool
+    - snap_check.stat.exists
+
+# ── BREW: upgrade (as the login user, never root) ───────────────────────────
+- name: "brew | detect"
+  ansible.builtin.stat:
+    path: "{{ brew_bin }}"
+  register: brew_stat
+
+- name: "brew | update then upgrade"
+  ansible.builtin.command: "{{ brew_bin }} {{ item }}"
+  loop:
+    - update
+    - upgrade
+  become: false                  # run as the SSH/login user, who owns the brew prefix
+  environment:
+    HOME: "/home/{{ ansible_user }}"
+  register: brew_upgrade
+  changed_when: true
+  when:
+    - patch_brew | bool
+    - brew_stat.stat.exists
+
+# ── APT: cleanup ────────────────────────────────────────────────────────────
+- name: "apt | autoremove unused packages (purge configs)"
+  ansible.builtin.apt:
+    autoremove: true
+    purge: true
+    lock_timeout: "{{ apt_lock_timeout }}"
+  become: true
+  when: patch_apt | bool
+
+- name: "apt | autoclean downloaded archives"
+  ansible.builtin.apt:
+    autoclean: true
+    lock_timeout: "{{ apt_lock_timeout }}"
+  become: true
+  when: patch_apt | bool
+
+# ── SNAP: cleanup (remove old, disabled revisions) ──────────────────────────
+- name: "snap | list old (disabled) revisions"
+  ansible.builtin.shell:
+    cmd: |
+      set -o pipefail
+      snap list --all | awk '/disabled/{print $1 "@" $3}'
+    executable: /bin/bash
+  register: snap_old
+  changed_when: false
+  failed_when: false
+  when:
+    - patch_snap | bool
+    - snap_check.stat.exists
+
+- name: "snap | remove old revisions"
+  ansible.builtin.command: "snap remove {{ item.split('@')[0] }} --revision {{ item.split('@')[1] }}"
+  become: true
+  loop: "{{ snap_old.stdout_lines | default([]) }}"
+  changed_when: true
+  when:
+    - patch_snap | bool
+    - snap_check.stat.exists
+    - snap_old.stdout_lines | default([]) | length > 0
+
+# ── BREW: cleanup ───────────────────────────────────────────────────────────
+- name: "brew | autoremove and cleanup"
+  ansible.builtin.command: "{{ brew_bin }} {{ item }}"
+  loop:
+    - autoremove
+    - cleanup -s
+  become: false
+  environment:
+    HOME: "/home/{{ ansible_user }}"
+  changed_when: true
+  when:
+    - patch_brew | bool
+    - brew_stat.stat.exists
