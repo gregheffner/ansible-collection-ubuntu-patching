@@ -42,7 +42,7 @@
     - upgrade
   become: false                  # run as the SSH/login user, who owns the brew prefix
   environment:
-    HOME: "/home/{{ ansible_user }}"
+    HOME: "/home/{{ brew_stat.stat.pw_name }}"   # brew owner; robust when inventory omits ansible_user
   register: brew_upgrade
   changed_when: true
   when:
@@ -97,7 +97,7 @@
     - cleanup -s
   become: false
   environment:
-    HOME: "/home/{{ ansible_user }}"
+    HOME: "/home/{{ brew_stat.stat.pw_name }}"   # brew owner; robust when inventory omits ansible_user
   changed_when: true
   when:
     - patch_brew | bool
