@@ -1,23 +1,20 @@
 # Example inventory — the REAL one is injected at run time from the
 # ANSIBLE_HOSTS GitHub secret into inventory/hosts (git-ignored).
 #
-# What the plays need:
-#   * a group `k8s_cluster` with the kube nodes (control-plane first)
-#   * a group `ubuntu` containing every Ubuntu host (incl. the runner host)
-#   * Play 1 targets `k8s_cluster`; Play 2 targets `ubuntu:!k8s_cluster`
+# What the plays need (mirrors the real CI inventory's groups):
+#   * [k8s_cluster] — the kube nodes, control-plane first
+#   * [docker]      — the non-k8s host(s), i.e. the runner/docker host
+#   Play 1 targets `k8s_cluster`; Play 2 targets `docker:!k8s_cluster`.
+#   Add any future non-k8s Ubuntu host to [docker] to have it patched.
 #
 # The SSH login user on each host must own the Homebrew prefix
 # (/home/linuxbrew/.linuxbrew) — brew tasks run as that login user, never root.
 
-[ubuntu]
+[k8s_cluster]
 control-node ansible_host=10.0.0.10 ansible_user=youruser
 node1        ansible_host=10.0.0.11 ansible_user=youruser
 node2        ansible_host=10.0.0.12 ansible_user=youruser
 node3        ansible_host=10.0.0.13 ansible_user=youruser
-runner-host  ansible_host=localhost ansible_user=youruser
 
-[k8s_cluster]
-control-node
-node1
-node2
-node3
+[docker]
+runner-host  ansible_host=localhost ansible_user=youruser
