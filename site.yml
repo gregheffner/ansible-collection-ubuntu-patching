@@ -42,16 +42,20 @@
       when: not ansible_check_mode
 
     - name: "Wait for {{ inventory_hostname }} to report Ready"
+      # kubectl wait (no jsonpath/quotes) — the command module shlex-splits cmd,
+      # which would strip the inner quotes of a jsonpath filter. wait blocks until
+      # the node is Ready; the retry loop covers the API-down window while a
+      # control-plane node is mid-reboot (kubectl returns non-zero until the API is up).
       ansible.builtin.command:
         cmd: >-
-          kubectl --kubeconfig {{ kubeconfig }} get node {{ inventory_hostname }}
-          -o jsonpath={.status.conditions[?(@.type=="Ready")].status}
+          kubectl --kubeconfig {{ kubeconfig }} wait --for=condition=Ready
+          node/{{ inventory_hostname }} --timeout=300s
       delegate_to: "{{ kube_control_host }}"
       register: node_ready
       changed_when: false
-      retries: 60                # up to ~10 min for the API/node to come back
-      delay: 10
-      until: node_ready.stdout == "True"
+      retries: 20
+      delay: 15
+      until: node_ready.rc == 0
       when: not ansible_check_mode
 
     - name: "Uncordon {{ inventory_hostname }} (resume scheduling)"
