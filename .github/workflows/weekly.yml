@@ -2,10 +2,12 @@ name: Weekly Patching
 
 on:
   schedule:
-    # GitHub schedule crons are UTC. 11:00 UTC Sat = 07:00 EDT / 06:00 EST,
-    # i.e. Saturday morning Eastern. (Old job ran 06:00 UTC = 02:00 local and
-    # collided with apt-daily-upgrade.timer ~06:16 UTC; this avoids that.)
-    - cron: '0 11 * * 6'
+    # GitHub schedule crons are UTC and often fire late (observed 5-74 min);
+    # off-peak minute reduces the delay. 09:47 UTC Sat = 05:47 EDT / 04:47 EST,
+    # so even a late fire + ~24 min run finishes before 07:00 Eastern.
+    # (Old 06:00 UTC slot collided with apt-daily-upgrade.timer ~06:16 UTC —
+    # still avoided.)
+    - cron: '47 9 * * 6'
   workflow_dispatch:
 
 jobs:
