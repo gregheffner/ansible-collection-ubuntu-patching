@@ -90,12 +90,44 @@
     - snap_old.stdout_lines | default([]) | length > 0
 
 # ── BREW: cleanup ───────────────────────────────────────────────────────────
-# NOTE: `brew autoremove` is deliberately NOT run. On 2026-06-27 it deleted the
-# Homebrew `unbound` keg on dockerhost (Pi-hole's upstream resolver on :5335),
-# which broke cluster + LAN DNS after the patch reboot. `cleanup -s` only prunes
-# old versions and the download cache — it never removes an installed keg — so it
-# is safe. If brew disk usage ever needs trimming, run autoremove manually after
-# confirming nothing in use (e.g. unbound) is marked as a removable dependency.
+# `brew autoremove` deleted the unbound keg on 2026-06-27 (Pi-hole's upstream
+# resolver on :5335) because it was flagged as a dependency-only install. It is
+# now guarded: a dry-run first, and the play FAILS if any brew_protected_formulae
+# would be removed — fix by re-flagging with `brew install <formula>`.
+- name: "brew | autoremove dry-run"
+  ansible.builtin.command: "{{ brew_bin }} autoremove --dry-run"
+  become: false
+  environment:
+    HOME: "/home/{{ brew_stat.stat.pw_name }}"
+  register: brew_autoremove_dryrun
+  changed_when: false
+  when:
+    - patch_brew | bool
+    - brew_stat.stat.exists
+
+- name: "brew | refuse to autoremove protected formulae"
+  ansible.builtin.fail:
+    msg: >-
+      brew autoremove would delete protected formula '{{ item }}' on
+      {{ inventory_hostname }} — it has lost its installed-on-request flag.
+      Run '{{ brew_bin }} install {{ item }}' to re-flag it, then re-run.
+  loop: "{{ brew_protected_formulae }}"
+  when:
+    - patch_brew | bool
+    - brew_stat.stat.exists
+    - item in (brew_autoremove_dryrun.stdout | default(''))
+
+- name: "brew | autoremove"
+  ansible.builtin.command: "{{ brew_bin }} autoremove"
+  become: false
+  environment:
+    HOME: "/home/{{ brew_stat.stat.pw_name }}"
+  changed_when: brew_autoremove_dryrun.stdout | default('') | length > 0
+  when:
+    - patch_brew | bool
+    - brew_stat.stat.exists
+    - brew_autoremove_dryrun.stdout | default('') | length > 0
+
 - name: "brew | cleanup old versions + cache"
   ansible.builtin.command: "{{ brew_bin }} cleanup -s"
   become: false

@@ -14,3 +14,8 @@ brew_bin: /home/linuxbrew/.linuxbrew/bin/brew
 # Wait this long (seconds) for the dpkg/apt lock instead of failing instantly,
 # so we don't lose a race with apt-daily / unattended-upgrades timers.
 apt_lock_timeout: 300
+
+# Formulae that must never be swept by `brew autoremove`. If one appears in the
+# autoremove dry-run, the play fails instead of removing it (see tasks/main.yml).
+brew_protected_formulae:
+  - unbound
