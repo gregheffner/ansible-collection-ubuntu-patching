@@ -1,14 +1,17 @@
 name: Weekly Patching
 
+# Triggered LOCALLY by weekly-patching-dispatch.timer on dockerhost (Sat 09:47 UTC),
+# NOT by GitHub's cron. GitHub stopped emitting scheduled-trigger events for this account on
+# 2026-08-26, and late ticks drifted 11-12h - which would drain and reboot cluster nodes at
+# night, the exact thing the 09:47 UTC slot was chosen to avoid.
+# See vault note "2026-08-29 GitHub Actions Scheduled Runs Stopped Firing".
+# Dropping the cron trigger also exempts this workflow from the 60-day inactivity auto-disable.
 on:
-  schedule:
-    # GitHub schedule crons are UTC and often fire late (observed 5-74 min);
-    # off-peak minute reduces the delay. 09:47 UTC Sat = 05:47 EDT / 04:47 EST,
-    # so even a late fire + ~24 min run finishes before 07:00 Eastern.
-    # (Old 06:00 UTC slot collided with apt-daily-upgrade.timer ~06:16 UTC —
-    # still avoided.)
-    - cron: '47 9 * * 6'
   workflow_dispatch:
+
+concurrency:
+  group: weekly-patching
+  cancel-in-progress: false
 
 jobs:
   patch:
