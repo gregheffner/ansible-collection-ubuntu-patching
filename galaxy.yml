@@ -1,0 +1,26 @@
+namespace: gregheffner
+name: ubuntu_patching
+version: 2.0.0
+readme: README.md
+authors:
+  - Greg Heffner
+description: >-
+  Weekly hands-off patching for an Ubuntu fleet (apt + snap + Homebrew/Linuxbrew,
+  with cleanup and guarded brew autoremove), plus a serial rolling
+  drain/patch/reboot/uncordon workflow that keeps a Kubernetes cluster live.
+license:
+  - MIT
+tags:
+  - linux
+  - ubuntu
+  - patching
+  - kubernetes
+  - maintenance
+  - homebrew
+repository: https://github.com/gregheffner/ansible-collection-ubuntu-patching
+issues: https://github.com/gregheffner/ansible-collection-ubuntu-patching/issues
+build_ignore:
+  - .github
+  - .gitignore
+  - inventory/hosts
+  - ansible.cfg

@@ -1,0 +1,17 @@
+---
+# Which host runs kubectl, and with which kubeconfig. Defaults assume the
+# control-plane node is listed FIRST in the [k8s_cluster] inventory group and
+# that its ansible_user owns the kubeconfig.
+kube_control_host: "{{ groups['k8s_cluster'][0] }}"
+kubeconfig: "/home/{{ hostvars[groups['k8s_cluster'][0]].ansible_user }}/.kube/config"
+
+# Lifecycle timeouts (seconds).
+drain_timeout: 300
+reboot_timeout: 900
+post_reboot_delay: 30
+
+# Waiting for the node to come back Ready. The retry loop also covers the
+# API-down window while a control-plane node is itself mid-reboot.
+ready_wait_timeout: 300
+ready_retries: 20
+ready_delay: 15

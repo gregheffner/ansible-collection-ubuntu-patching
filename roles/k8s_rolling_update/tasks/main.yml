@@ -1,0 +1,9 @@
+---
+# This role is consumed via tasks_from, wrapped around your patching role:
+#   pre_tasks:  include_role k8s_rolling_update, tasks_from: drain
+#   roles:      <your patching role>
+#   post_tasks: include_role k8s_rolling_update, tasks_from: resume
+# Running it bare (main) does drain -> resume with no patching in between,
+# which is still useful as a rolling reboot.
+- ansible.builtin.include_tasks: drain.yml
+- ansible.builtin.include_tasks: resume.yml

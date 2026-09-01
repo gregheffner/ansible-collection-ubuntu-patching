@@ -1,13 +1,58 @@
-# ubuntu-patching
+# ubuntu_patching
 
-Weekly, hands-off patching for the home-lab Ubuntu fleet. Patches **apt + snap +
-brew**, cleans up afterward, and reboots to apply — keeping the Kubernetes
-cluster live by doing **one node at a time**.
+Weekly, hands-off patching for an Ubuntu fleet. Patches **apt + snap + brew**,
+cleans up afterward, and reboots to apply — keeping a Kubernetes cluster live by
+doing **one node at a time**.
 
-This replaces the old Galaxy-collection setup. There is **no Galaxy publish step
-and no playbook download** — the self-hosted runner checks out this repo and runs
-`site.yml` directly, so editing a task and pushing to `main` takes effect on the
-very next run.
+Published on Galaxy as
+[`gregheffner.ubuntu_patching`](https://galaxy.ansible.com/ui/repo/published/gregheffner/ubuntu_patching/),
+and also runnable straight from this checkout (that is how the author's own
+fleet runs it — see *Run it from a checkout* below).
+
+## Use it as a collection
+
+```bash
+ansible-galaxy collection install gregheffner.ubuntu_patching
+```
+
+Two roles:
+
+- **`patch_common`** — apt `dist-upgrade` + autoremove/autoclean, `snap refresh`
+  + old-revision pruning, and Homebrew/Linuxbrew `update`/`upgrade`/`cleanup`
+  run **as the owning user, never root**, with a **guarded `brew autoremove`**:
+  list load-bearing formulae in `brew_protected_formulae` and the play fails
+  loudly instead of sweeping one that lost its installed-on-request flag.
+  Every package manager self-skips when not installed.
+- **`k8s_rolling_update`** — the node lifecycle for patching a live cluster:
+  `drain` before, `reboot → wait Ready → uncordon` after, all `kubectl` runs
+  delegated to the control-plane node. Consumed via `tasks_from` wrapped around
+  any patching role, with a `serial: 1` play keeping the cluster available.
+
+```yaml
+- name: Patch the cluster one node at a time
+  hosts: k8s_cluster
+  serial: 1
+  become: true
+  pre_tasks:
+    - ansible.builtin.include_role:
+        name: gregheffner.ubuntu_patching.k8s_rolling_update
+        tasks_from: drain
+  roles:
+    - role: gregheffner.ubuntu_patching.patch_common
+      vars:
+        brew_protected_formulae: [unbound]
+  post_tasks:
+    - ansible.builtin.include_role:
+        name: gregheffner.ubuntu_patching.k8s_rolling_update
+        tasks_from: resume
+```
+
+Defaults assume the control-plane node is listed **first** in `[k8s_cluster]`
+and its `ansible_user` owns the kubeconfig; override `kube_control_host` /
+`kubeconfig` if not. All timeouts are variables (see
+`roles/k8s_rolling_update/defaults/main.yml`).
+
+## Run it from a checkout
 
 ## What runs
 

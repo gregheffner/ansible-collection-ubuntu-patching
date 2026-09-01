@@ -15,23 +15,15 @@
   serial: 1                      # exactly one node in flight; cluster keeps quorum/capacity
   become: true
   gather_facts: true
-  vars:
-    # All kubectl runs go through the control-plane node, which holds the
-    # kubeconfig. Derived from the inventory (control-plane listed FIRST in
-    # [k8s_cluster], per hosts.example) so no site-specific hostname or
-    # username lives in this public file.
-    kube_control_host: "{{ groups['k8s_cluster'][0] }}"
-    kubeconfig: "/home/{{ hostvars[groups['k8s_cluster'][0]].ansible_user }}/.kube/config"
-
+  # Node lifecycle (drain / reboot / wait Ready / uncordon) lives in the
+  # k8s_rolling_update role; kube_control_host + kubeconfig come from its
+  # defaults, derived from the inventory (control-plane listed FIRST in
+  # [k8s_cluster], per hosts.example).
   pre_tasks:
-    - name: "Drain {{ inventory_hostname }} (cordon + evict workloads)"
-      ansible.builtin.command:
-        cmd: >-
-          kubectl --kubeconfig {{ kubeconfig }} drain {{ inventory_hostname }}
-          --ignore-daemonsets --delete-emptydir-data --force --timeout=300s
-      delegate_to: "{{ kube_control_host }}"
-      changed_when: true
-      when: not ansible_check_mode     # node lifecycle is runtime-only; skip in --check
+    - name: Drain the node before patching
+      ansible.builtin.include_role:
+        name: k8s_rolling_update
+        tasks_from: drain
 
   roles:
     - role: patch_common
@@ -47,36 +39,10 @@
       changed_when: false
       when: not ansible_check_mode
 
-    - name: "Reboot {{ inventory_hostname }} to apply updates (verified come-back)"
-      ansible.builtin.reboot:
-        reboot_timeout: 900
-        post_reboot_delay: 30
-        msg: "Weekly patching reboot"
-      when: not ansible_check_mode
-
-    - name: "Wait for {{ inventory_hostname }} to report Ready"
-      # kubectl wait (no jsonpath/quotes) — the command module shlex-splits cmd,
-      # which would strip the inner quotes of a jsonpath filter. wait blocks until
-      # the node is Ready; the retry loop covers the API-down window while a
-      # control-plane node is mid-reboot (kubectl returns non-zero until the API is up).
-      ansible.builtin.command:
-        cmd: >-
-          kubectl --kubeconfig {{ kubeconfig }} wait --for=condition=Ready
-          node/{{ inventory_hostname }} --timeout=300s
-      delegate_to: "{{ kube_control_host }}"
-      register: node_ready
-      changed_when: false
-      retries: 20
-      delay: 15
-      until: node_ready.rc == 0
-      when: not ansible_check_mode
-
-    - name: "Uncordon {{ inventory_hostname }} (resume scheduling)"
-      ansible.builtin.command:
-        cmd: "kubectl --kubeconfig {{ kubeconfig }} uncordon {{ inventory_hostname }}"
-      delegate_to: "{{ kube_control_host }}"
-      changed_when: true
-      when: not ansible_check_mode
+    - name: Reboot, wait Ready, uncordon
+      ansible.builtin.include_role:
+        name: k8s_rolling_update
+        tasks_from: resume
 
 # ────────────────────────────────────────────────────────────────────────────
 # PLAY 2: Everything else (dockerhost) — patched and rebooted LAST.
