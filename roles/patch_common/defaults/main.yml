@@ -7,7 +7,7 @@ patch_brew: true
 
 # Homebrew (Linuxbrew) MUST run as its owning user, never root.
 # On this fleet the brew owner == the SSH login user on every host
-# (ansible on dockerhost, huey on the k8s nodes), so brew tasks just drop
+# (the CI service user on the runner host, the admin user on the k8s nodes), so brew tasks just drop
 # `become` and run as that login user. brew_bin is the shared prefix path.
 brew_bin: /home/linuxbrew/.linuxbrew/bin/brew
 

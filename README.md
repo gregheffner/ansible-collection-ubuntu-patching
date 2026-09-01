@@ -16,7 +16,7 @@ very next run.
 | Play | Hosts | What it does |
 |------|-------|--------------|
 | 1 — cluster | `k8s_cluster` (`serial: 1`) | per node: **drain → patch → truncate nginx logs → reboot → wait Ready → uncordon**. Only advances to the next node once this one is back. |
-| 2 — rest | `docker:!k8s_cluster` (= `dockerhost`) | patch, then **always reboot** (scheduled with `shutdown -r +1` so it fires *after* the job exits, since the runner lives here). |
+| 2 — rest | `docker:!k8s_cluster` (= the runner host) | patch, then **always reboot** (scheduled with `shutdown -r +1` so it fires *after* the job exits, since the runner lives here). |
 
 Every patch run **reboots** every host (k8s nodes inline; dockerhost deferred). nginx access/error logs (hostPath from the nginx pods) are truncated on each node before its reboot, so fail2ban doesn't re-ban old 404s when the pod rolls; the task self-skips on hosts without those logs.
 
@@ -31,8 +31,11 @@ are skipped by apt automatically, so the cluster version never moves during a pa
 
 ## Schedule
 
-GitHub Actions cron (UTC): `0 11 * * 6` → **Saturday ~07:00 Eastern** (06:00 in
-winter). Trigger manually anytime via **Actions → Weekly Patching → Run workflow**.
+Dispatched **locally** by a systemd timer on the runner host (Sat 09:47 UTC) via
+`gh workflow run`, not by GitHub's cron — GitHub's scheduled triggers proved
+unreliable (dropped and late ticks), and a late tick here means draining and
+rebooting cluster nodes at the wrong time of day. Trigger manually anytime via
+**Actions → Weekly Patching → Run workflow**.
 
 ## Inventory
 
@@ -50,7 +53,7 @@ ansible-playbook -i inventory/hosts site.yml
 ansible-playbook -i inventory/hosts site.yml --check --diff
 
 # one host only:
-ansible-playbook -i inventory/hosts site.yml --limit worker1
+ansible-playbook -i inventory/hosts site.yml --limit <node>
 ```
 
 ## Notes / gotchas
@@ -58,5 +61,5 @@ ansible-playbook -i inventory/hosts site.yml --limit worker1
 - If a node's **drain** can't finish in 300s (e.g. a PodDisruptionBudget blocks
   eviction) the run stops with that node left cordoned — fix the workload and
   re-run with `--limit <node>`, then `kubectl uncordon <node>` if needed.
-- Brew running under the `ansible` service account on dockerhost is a known
+- Brew running under the CI service account on the runner host is a known
   smell inherited from the existing setup — fine functionally, worth tidying later.

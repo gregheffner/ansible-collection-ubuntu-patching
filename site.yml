@@ -16,9 +16,12 @@
   become: true
   gather_facts: true
   vars:
-    # All kubectl runs go through the control-plane node, which holds the kubeconfig.
-    kube_control_host: k8-primary
-    kubeconfig: /home/huey/.kube/config
+    # All kubectl runs go through the control-plane node, which holds the
+    # kubeconfig. Derived from the inventory (control-plane listed FIRST in
+    # [k8s_cluster], per hosts.example) so no site-specific hostname or
+    # username lives in this public file.
+    kube_control_host: "{{ groups['k8s_cluster'][0] }}"
+    kubeconfig: "/home/{{ hostvars[groups['k8s_cluster'][0]].ansible_user }}/.kube/config"
 
   pre_tasks:
     - name: "Drain {{ inventory_hostname }} (cordon + evict workloads)"
