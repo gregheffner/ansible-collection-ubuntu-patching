@@ -46,18 +46,28 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
       # Datadog heartbeat (2026-09-13). CI Visibility's own monitors cannot look back
-      # more than 2 days, so a "no patch run in 8 days" alert needs a metric: one count
+      # more than 2 days, so a "no patch run in a week" alert needs a metric: one count
       # per run tagged with the job status. Monitor "[CI] Weekly Patching has not
       # succeeded in the last week" alerts when a week passes with no status:success.
-      # Best-effort: a Datadog outage must never fail the patch run.
+      #
+      # The Datadog API key is read from 1Password at run time with the repo's existing
+      # service-account token - no second copy of the key in GitHub, rotation happens in
+      # 1Password only. Best-effort: neither a 1Password nor a Datadog outage may fail
+      # the patch run, so every failure path exits 0.
       - name: Datadog heartbeat
         if: always()
         env:
-          DD_API_KEY: ${{ secrets.DD_API_KEY }}
+          OP_SERVICE_ACCOUNT_TOKEN: ${{ secrets.OP_SERVICE_ACCOUNT_TOKEN }}
+          JOB_STATUS: ${{ job.status }}
         run: |
-          [ -n "$DD_API_KEY" ] || { echo "DD_API_KEY not set; skipping heartbeat"; exit 0; }
+          set +e
+          export PATH="$PATH:/home/linuxbrew/.linuxbrew/bin"   # runner service is a non-login shell; op is a brew install
+          command -v op >/dev/null || { echo "op CLI not on runner; skipping heartbeat"; exit 0; }
+          DD_API_KEY="$(op read 'op://k8s-cluster-secrets/datadog-secret/api-key' 2>/dev/null)"
+          [ -n "$DD_API_KEY" ] || { echo "could not read Datadog key from 1Password (service account lacks the vault?); skipping heartbeat"; exit 0; }
           curl -sS --max-time 15 -o /dev/null -w 'datadog heartbeat http=%{http_code}\n' \
             -X POST https://api.us5.datadoghq.com/api/v2/series \
             -H "DD-API-KEY: $DD_API_KEY" -H "Content-Type: application/json" \
-            -d "{\"series\":[{\"metric\":\"ci.weekly_patching.run\",\"type\":1,\"points\":[{\"timestamp\":$(date +%s),\"value\":1}],\"tags\":[\"status:${{ job.status }}\",\"repo:ansible-collection-ubuntu-patching\",\"workflow:weekly-patching\",\"env:prod\"]}]}" \
+            -d "{\"series\":[{\"metric\":\"ci.weekly_patching.run\",\"type\":1,\"points\":[{\"timestamp\":$(date +%s),\"value\":1}],\"tags\":[\"status:$JOB_STATUS\",\"repo:ansible-collection-ubuntu-patching\",\"workflow:weekly-patching\",\"env:prod\"]}]}" \
             || echo "datadog heartbeat failed (ignored)"
+          exit 0
