@@ -97,6 +97,9 @@ jobs:
             fi
           fi
 
+          # A trailing newline from `op read` or a pasted secret would corrupt the header.
+          DD_API_KEY="$(printf '%s' "$DD_API_KEY" | tr -d ' \r\n')"
+
           HTTP="$(curl -sS --max-time 15 -o /tmp/dd-hb.out -w '%{http_code}' \
             -X POST https://api.us5.datadoghq.com/api/v2/series \
             -H "DD-API-KEY: $DD_API_KEY" -H "Content-Type: application/json" \
